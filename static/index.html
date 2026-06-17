@@ -105,8 +105,8 @@
     const RGBA = {};
     function dim(hex, a){ let c = RGBA[hex]; if(!c){ const m = hex.replace("#",""); c = RGBA[hex] = { r:parseInt(m.slice(0,2),16), g:parseInt(m.slice(2,4),16), b:parseInt(m.slice(4,6),16) }; } return `rgba(${c.r},${c.g},${c.b},${a})`; }
     function nodeColor(n){ if(hlNodes.size) return hlNodes.has(n.id)?baseColor(n):dim(baseColor(n),0.13); if(searchSet.size) return searchSet.has(n.id)?baseColor(n):dim(baseColor(n),0.10); return baseColor(n); }
-    const LINK_BASE="rgba(148,163,184,0.3)", LINK_FAINT="rgba(148,163,184,0.05)", LINK_HL="rgba(125,211,252,0.95)";
-    function linkColor(l){ if(hlLinks.size) return hlLinks.has(l)?LINK_HL:LINK_FAINT; if(searchSet.size) return LINK_FAINT; return LINK_BASE; }
+    const LINK_BASE="rgba(148,163,184,0.85)", LINK_FAINT="rgba(148,163,184,0.2)", LINK_HL="rgba(125,211,252,0.95)";
+    function linkColor(l){ if(hlLinks.size) return hlLinks.has(l)?LINK_HL:LINK_BASE; if(searchSet.size) return LINK_FAINT; return LINK_BASE; }
     function refreshStyles(){ if(!Graph) return; Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkDirectionalParticles(Graph.linkDirectionalParticles()); }
     function setHighlight(n){ hlNodes = new Set(); hlLinks = new Set(); if(n){ hlNodes.add(n.id); (adj[n.id]||[]).forEach(id=>hlNodes.add(id)); (inc[n.id]||[]).forEach(l=>hlLinks.add(l)); } refreshStyles(); }
 
