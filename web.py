@@ -186,25 +186,34 @@ def graph():
     links_by_file = {r["file"]: r["links"] for r in cur.fetchall()}
     conn.close()
     title_to_file = {r["title"]: r["file"] for r in base}
+
+    def slug(s):
+        return re.sub(r"[^a-z0-9-]", "", s.lower())
+
+    # brains link by slug (filename), not by title - so resolve [[X]] against both.
+    slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
                          "val": 16 if r["node_type"] == "hub" else 2} for r in base}
-    links = []
+    # categories are nodes too: one UPPER-CASE hub per category; every note links to it.
+    for c in sorted({r["category"] for r in base}):
+        nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 40, "is_cat": True}
+    links = [{"source": r["file"], "target": "cat:" + r["category"]} for r in base]
     for src, targets in links_by_file.items():
         for t in targets:
-            dst = title_to_file.get(t)
-            if dst is None:                       # link to a note that doesn't exist yet
+            dst = title_to_file.get(t) or slug_to_file.get(slug(t))
+            if dst is None:                       # link to a note that doesn't exist (yet)
                 dst = "ext:" + t
                 nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 2})
             links.append({"source": src, "target": dst})
-    # size nodes by connectivity (more links = bigger) so hubs stand out, like a real
-    # knowledge graph; explicit `type: hub` notes stay large regardless.
+    # size nodes by connectivity; category hubs and explicit hubs stay large.
     degree = {}
     for l in links:
         degree[l["source"]] = degree.get(l["source"], 0) + 1
         degree[l["target"]] = degree.get(l["target"], 0) + 1
     for nid, node in nodes.items():
-        if node["val"] != 16:  # not an explicit hub
-            node["val"] = min(2 + degree.get(nid, 0) * 2, 30)
+        if node.get("is_cat") or node["val"] == 16:
+            continue
+        node["val"] = min(2 + degree.get(nid, 0) * 2, 30)
     return {"nodes": list(nodes.values()), "links": links}
 
 

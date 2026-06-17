@@ -58,9 +58,11 @@ def split_blocks(body):
 
 
 def category_of(rel):
-    """Top-level folder under NOTES_DIR = category (file in root -> 'uncategorized')."""
+    """Top-level folder under NOTES_DIR = category; a file in the root uses the notes
+    directory's own name. Upper-cased (categories are shown in CAPS, like a brain hub)."""
     parts = rel.split(os.sep)
-    return parts[0] if len(parts) > 1 else 'uncategorized'
+    top = parts[0] if len(parts) > 1 else (os.path.basename(NOTES_DIR.rstrip(os.sep)) or "notes")
+    return top.upper()
 
 
 def process_file(path):
@@ -69,7 +71,7 @@ def process_file(path):
         raw = f.read()
     fm, body = parse_frontmatter(raw)
     f_title  = fm.get('title', os.path.splitext(os.path.basename(rel))[0])
-    category = fm.get('category', category_of(rel))
+    category = (fm.get('category') or fm.get('project') or category_of(rel)).upper()
     node_type = 'hub' if fm.get('type') == 'hub' else 'note'
     out = []
     for header, content in split_blocks(body):
