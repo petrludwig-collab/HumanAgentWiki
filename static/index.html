@@ -50,6 +50,8 @@
     #note .meta { color: #64748b; font-size: 11px; margin-bottom: 12px; }
     #note .meta .metacat { color: #c084fc; cursor: pointer; }
     #note .meta .metacat:hover { text-decoration: underline; }
+    #note .meta .makenode { color: #5b8cff; cursor: pointer; }
+    #note .meta .makenode:hover { text-decoration: underline; }
     #note-tags { margin: 4px 0 2px; }
     #note-tags .tag { display: inline-block; font-size: 11px; color: #cbd5e1; background: #1e293b; border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; cursor: pointer; }
     #note-tags .tag:hover { background: #334155; }
@@ -111,7 +113,7 @@
     function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-    let Graph, fullData = null, curNote = null, allTags = [];
+    let Graph, fullData = null, curNote = null, allTags = [], nodeTagSet = new Set();
     const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
     const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9-]/g, "");
     const adj = {}, inc = {};
@@ -189,7 +191,8 @@
       document.getElementById("note-edit").style.display = "none";
       document.getElementById("note-title").textContent = "🏷 " + name;
       document.getElementById("note-tags").innerHTML = "";
-      document.getElementById("note-meta").textContent = list.length + " notes";
+      const _isNode = nodeTagSet.has(name);
+      document.getElementById("note-meta").innerHTML = `${list.length} notes &nbsp;·&nbsp; <span class="makenode" onclick="toggleNodeTag('${name.replace(/'/g,"\\'")}')">${_isNode ? "● is a node (remove)" : "＋ Make a node"}</span>`;
       document.getElementById("note-body").innerHTML = list.length
         ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${b.id.replace(/'/g,"\\'")}')">${esc(b.label)}</div>`).join("") + "</div>"
         : "No notes.";
@@ -199,6 +202,13 @@
       searchSet = new Set(list.map(b => b.id));
       refreshStyles();
       document.getElementById("search-clear").style.display = "inline";
+    }
+    async function toggleNodeTag(name){
+      if(nodeTagSet.has(name)) await fetch("/api/node-tags/"+encodeURIComponent(name), {method:"DELETE"});
+      else await fetch("/api/node-tags", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({tag:name})});
+      nodeTagSet = new Set(await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]));
+      await reloadGraph();
+      openTag(name);
     }
     async function openNote(id, focus=true){
       try {
@@ -317,6 +327,7 @@
     (async () => {
       await loadCats();
       allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);
+      nodeTagSet = new Set(await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]));
       const data = await fetch("/api/graph").then(r=>r.json());
       ingest(data);
       const groups = legendGroups();

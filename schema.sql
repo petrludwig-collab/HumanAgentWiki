@@ -41,3 +41,10 @@ CREATE TABLE IF NOT EXISTS categories (
     name        text PRIMARY KEY,
     created_at  timestamptz DEFAULT now()
 );
+
+-- Tags promoted to graph nodes ("make a node"): the tag becomes a node that links to
+-- every note carrying it (or, if a note with the same title exists, links them to it).
+CREATE TABLE IF NOT EXISTS node_tags (
+    tag         text PRIMARY KEY,
+    created_at  timestamptz DEFAULT now()
+);
