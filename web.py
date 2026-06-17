@@ -211,7 +211,7 @@ def graph():
     slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
                          "tags": r["tags"] or [],
-                         "val": 16 if (r["node_type"] == "hub" or (HUB_TAG and HUB_TAG in (r["tags"] or []))) else 2}
+                         "val": 16 if (r["node_type"] == "hub" or (HUB_TAG and HUB_TAG in (r["tags"] or []))) else 0.7}
              for r in base}
     # categories are nodes too: one hub per category; every note links to it.
     for c in sorted({r["category"] for r in base}):
@@ -222,7 +222,7 @@ def graph():
             dst = title_to_file.get(t) or slug_to_file.get(slug(t))
             if dst is None:                       # link to a note that doesn't exist (yet)
                 dst = "ext:" + t
-                nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 2})
+                nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 0.7})
             links.append({"source": src, "target": dst})
     # sizes: category node = 54 (largest), HUB_TAG/hub note = 16 (medium), everything else = 2.
     return {"nodes": list(nodes.values()), "links": links}
