@@ -187,7 +187,7 @@ def graph():
     conn.close()
     title_to_file = {r["title"]: r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
-                         "val": 16 if r["node_type"] == "hub" else 4} for r in base}
+                         "val": 16 if r["node_type"] == "hub" else 2} for r in base}
     links = []
     for src, targets in links_by_file.items():
         for t in targets:

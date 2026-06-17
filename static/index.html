@@ -9,8 +9,7 @@
     body { margin: 0; background: #0b0f1a; color: #e5e7eb; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; overflow: hidden; }
     #graph { width: 100vw; height: 100vh; }
     #panel { position: fixed; top: 12px; left: 12px; z-index: 10; width: 264px; background: rgba(15,23,42,.82); border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; font-size: 13px; backdrop-filter: blur(6px); }
-    #panel h1 { font-size: 14px; margin: 0 0 8px; display: flex; align-items: center; justify-content: space-between; }
-    #panel h1 .v2 { color: #60a5fa; font-weight: 700; }
+    #panel h1 { font-size: 14px; margin: 0 0 8px; }
     #search { width: 100%; box-sizing: border-box; margin: 4px 0 6px; padding: 6px 9px; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 8px; color: #e5e7eb; font-size: 13px; }
     #search::placeholder { color: #64748b; }
     #results { max-height: 38vh; overflow-y: auto; margin-bottom: 6px; }
@@ -21,8 +20,8 @@
     .leg { display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; user-select: none; }
     .leg:hover { opacity: .8; } .leg.off { opacity: .4; }
     .leg .box { width: 13px; display: inline-block; text-align: center; }
-    .leg .x { margin-left: auto; color: #475569; font-size: 13px; visibility: hidden; }
-    .leg:hover .x { visibility: visible; } .leg .x:hover { color: #f87171; }
+    .leg .x { margin-left: auto; color: #f87171; font-size: 15px; cursor: pointer; padding: 0 4px; }
+    .leg .x:hover { color: #fca5a5; }
     #legend .ctl { font-size: 11px; color: #64748b; margin: 6px 0 2px; }
     #legend .ctl-link { cursor: pointer; } #legend .ctl-link:hover { color: #cbd5e1; text-decoration: underline; }
     .dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -66,11 +65,10 @@
 </head>
 <body>
   <div id="panel">
-    <h1>🧠 HumanAgent<span class="v2">Wiki</span></h1>
+    <h1>🧠 HumanAgentWiki</h1>
     <input id="search" type="text" placeholder="🔍 Search notes..." oninput="runSearch()" autocomplete="off" />
     <div id="results"></div>
     <div id="legend"></div>
-    <div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()" /><button class="btn" onclick="addCat()">+</button></div>
     <button class="btn blue" id="newnote" onclick="newNote()">+ New note</button>
     <label id="lblToggle"><input type="checkbox" id="showLabels" checked /> Show main labels</label>
     <div id="stats">loading...</div>
@@ -112,19 +110,23 @@
     function refreshStyles(){ if(!Graph) return; Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkDirectionalParticles(Graph.linkDirectionalParticles()); }
     function setHighlight(n){ hlNodes = new Set(); hlLinks = new Set(); if(n){ hlNodes.add(n.id); (adj[n.id]||[]).forEach(id=>hlNodes.add(id)); (inc[n.id]||[]).forEach(l=>hlLinks.add(l)); } refreshStyles(); }
 
+    let editingCats = false;
     function buildLegend(groups){
       const el = document.getElementById("legend");
       el.innerHTML = groups.map(g => {
         const on = active.has(g);
-        const known = categories.includes(g);
-        return `<div class="leg${on?"":" off"}" data-g="${g}"><span class="box">${on?"☑":"☐"}</span><span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span>${g}${known?`<span class="x" title="Remove category" data-del="${g}">×</span>`:""}</div>`;
-      }).join("") + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span></div>`;
+        return `<div class="leg${on?"":" off"}" data-g="${g}"><span class="box">${on?"☑":"☐"}</span><span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span><span class="lname">${g}</span>${editingCats?`<span class="x" data-del="${g}" title="Remove category">−</span>`:""}</div>`;
+      }).join("")
+      + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span> · <span class="ctl-link" id="leg-edit">${editingCats?"done":"edit"}</span></div>`
+      + (editingCats ? `<div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()"><button class="btn" onclick="addCat()">+</button></div>` : "");
       el.querySelectorAll(".leg").forEach(d => d.onclick = e => {
         if(e.target.dataset.del){ delCat(e.target.dataset.del); return; }
+        if(editingCats) return;                       // edit mode: row click doesn't toggle the filter
         const g = d.dataset.g; active.has(g)?active.delete(g):active.add(g); buildLegend(groups); applyFilter(); saveState({active:[...active]});
       });
       document.getElementById("leg-all").onclick = () => { groups.forEach(g=>active.add(g)); buildLegend(groups); applyFilter(); saveState({active:[...active]}); };
       document.getElementById("leg-none").onclick = () => { active.clear(); buildLegend(groups); applyFilter(); saveState({active:[...active]}); };
+      document.getElementById("leg-edit").onclick = () => { editingCats = !editingCats; buildLegend(groups); };
     }
     function applyFilter(){
       if(!fullData||!Graph) return;
@@ -223,7 +225,7 @@
       refreshStyles();
       if(!q){ box.innerHTML=""; return; }
       const hits = Object.values(nodeById).filter(n=>(n.label||"").toLowerCase().includes(q)).sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
-      box.innerHTML = hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)} <span class="restype">· ${esc(n.group||"")}</span></div>`).join("") || '<div class="res dim">no results</div>';
+      box.innerHTML = hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)}</div>`).join("") || '<div class="res dim">no results</div>';
     }
 
     // [[ autocomplete in the editor textarea

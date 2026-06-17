@@ -1,20 +1,15 @@
 ---
 title: Start Here
-type: hub
 category: Guides
+type: hub
 ---
 
-# Welcome to your HumanAgentWiki
+# Start Here
 
-This is a tiny demo wiki so you can see how it works. Delete it and add your own notes whenever you like.
+Welcome to your HumanAgentWiki - a tiny demo so you can see how it works. Delete it and add your own notes.
 
-- Notes are plain **Markdown files in folders** - the folder is the **category** (here: Guides, Books, Ideas).
-- Link notes with **`[[wikilinks]]`** - for example [[Atomic Habits]] and [[Second Brain]].
-- After you add or edit notes, run `python cli.py index` - only the changed files are re-embedded.
-- Then ask your AI agent anything: it searches this wiki **by meaning, not keywords**.
+- Notes are Markdown files in folders; the folder is the **category**.
+- Link notes with double-bracket links, e.g. [[Atomic Habits]] or [[Second Brain]].
+- Your AI agents search this wiki by meaning via the MCP server.
 
-Try a search:
-
-```
-python cli.py search "how do small habits compound"
-```
+Explore notes like [[Deep Work]], [[Knowledge Management]] or [[Systems Thinking]].
