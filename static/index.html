@@ -292,7 +292,7 @@
         document.getElementById("note-tags").innerHTML = (n.tags||[]).slice()
           .sort((a,b)=> ((String(b) in nodeTagCat)?1:0) - ((String(a) in nodeTagCat)?1:0))   // node-tags first
           .map(t=>{ const nd = String(t) in nodeTagCat;
-            return `<span class="tag${nd?' tag-node':''}" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${nd?'● ':''}${esc(t)}</span>`;
+            return `<span class="tag${nd?' tag-node':''}" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">🏷 ${esc(t)}</span>`;
           }).join("");
         const _c = n.category || "";
         document.getElementById("note-meta").innerHTML = (_c ? `<span class="metacat" onclick="openCategory('${_c.replace(/'/g,"\\'")}')">${esc(_c)}</span> - ` : "") + esc(n.id);
@@ -371,7 +371,7 @@
         .sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
       let html = "";
       html += catHits.map(c=>`<div class="res rescat" onclick="openCategoryNode('${q1(c)}')">📁 ${esc(c)}</div>`).join("");
-      html += nodeTags.map(t=>`<div class="res restag restag-node" onclick="openTag('${q1(t.tag)}')">● <b>${esc(t.tag)}</b> <span class="restype">(${t.count})</span></div>`).join("");
+      html += nodeTags.map(t=>`<div class="res restag restag-node" onclick="openTag('${q1(t.tag)}')">🏷 <b>${esc(t.tag)}</b> <span class="restype">(${t.count})</span></div>`).join("");
       html += stdTags.map(t=>`<div class="res restag" onclick="openTag('${q1(t.tag)}')">🏷 ${esc(t.tag)} <span class="restype">(${t.count})</span></div>`).join("");
       html += hits.map(n=>`<div class="res" onclick="openNote('${q1(n.id)}')">📄 ${esc(n.label)}</div>`).join("");
       box.innerHTML = html || '<div class="res dim">no results</div>';
