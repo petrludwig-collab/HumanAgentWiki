@@ -288,7 +288,11 @@
 
       // map labels for big nodes (hubs)
       const labelLayer = document.getElementById("maplabels");
-      const mapLabels = data.nodes.filter(n=>n.val>=16).map(n=>{ const el=document.createElement("div"); el.className="map-label"; el.textContent=(n.label||"").slice(0,28); el.style.display="none"; labelLayer.appendChild(el); return {n,el}; });
+      // label only the most important nodes (hubs + most connected) - far fewer on screen
+      const mapLabels = data.nodes
+        .map(n => [n, (n.val || 0) * 1000 + ((adj[n.id] && adj[n.id].size) || 0)])
+        .sort((a, b) => b[1] - a[1]).slice(0, 22)
+        .map(([n]) => { const el=document.createElement("div"); el.className="map-label"; el.textContent=(n.label||"").slice(0,28); el.style.display="none"; labelLayer.appendChild(el); return {n,el}; });
       let labelsOn = (saved.labels!==false), frames=0, lastFps=performance.now();
       function updateLabels(){
         if(!labelsOn) return; frames++;
