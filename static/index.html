@@ -51,6 +51,9 @@
     #note-tags { margin: 4px 0 2px; }
     #note-tags .tag { display: inline-block; font-size: 11px; color: #cbd5e1; background: #1e293b; border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; cursor: pointer; }
     #note-tags .tag:hover { background: #334155; }
+    #note-tags .catchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #e5e7eb; background: #0b0f1a; border: 1px solid #334155; border-radius: 6px; padding: 2px 8px; margin: 2px 6px 2px 0; cursor: pointer; }
+    #note-tags .catchip:hover { border-color: #5b8cff; }
+    #note-tags .catchip .dot { width: 8px; height: 8px; }
     #note .nbody { word-break: break-word; font-size: 13px; line-height: 1.55; color: #e2e8f0; }
     #note .nbody h1,#note .nbody h2,#note .nbody h3 { color: #f1f5f9; line-height: 1.3; margin: 12px 0 4px; }
     #note .nbody h1 { font-size: 17px; } #note .nbody h2 { font-size: 15px; } #note .nbody h3 { font-size: 14px; }
@@ -172,6 +175,7 @@
       enterEdit();
     }
     async function openByTitle(t){ const n = nodeByTitle[t]; if(n) openNote(n.id); else newNote(t); }
+    function openCategory(c){ const node = nodeById["cat:" + c]; if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); } }
     async function openTag(name){
       const list = await fetch("/api/tag?name="+encodeURIComponent(name)).then(r=>r.json());
       curNote = null;
@@ -193,7 +197,9 @@
         curNote = n;
         document.getElementById("note-edit").style.display = "";
         document.getElementById("note-title").textContent = n.title;
-        document.getElementById("note-tags").innerHTML = (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
+        const _c = n.category || "";
+        const _catChip = _c ? `<span class="catchip" onclick="openCategory('${_c.replace(/'/g,"\\'")}')"><span class="dot" style="background:${groupColor[_c]||'#94a3b8'}"></span>${esc(_c)}</span>` : "";
+        document.getElementById("note-tags").innerHTML = _catChip + (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
         document.getElementById("note-meta").textContent = (n.category||"") + " · " + n.id;
         document.getElementById("note-body").innerHTML = renderBody(n.body);
         const bl = n.backlinks || [];
