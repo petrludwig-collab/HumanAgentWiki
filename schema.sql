@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     links       text[],                 -- [[wikilinks]] found in the chunk
     text        text NOT NULL,          -- chunk content
     meta        jsonb DEFAULT '{}',     -- optional/extensible metadata (date, tags, custom fields)
-    embedding   vector(1024),           -- BGE-M3 (1024-dim); change dim if you swap models
+    embedding   vector(1024),           -- BGE-M3 (1024-dim); 'cli.py init-db' substitutes EMB_DIM
     tsv         tsvector,               -- full-text (hybrid search)
     updated_at  timestamptz DEFAULT now()
 );

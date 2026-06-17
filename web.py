@@ -85,6 +85,9 @@ def add_category(c: CategoryIn):
     name = c.name.strip()
     if not name:
         raise HTTPException(400, "name required")
+    if "/" in name or "\\" in name or name.startswith("."):
+        # the name becomes a folder under NOTES_DIR — keep it from escaping
+        raise HTTPException(400, "category name cannot contain slashes or start with a dot")
     conn = connect()
     conn.execute("INSERT INTO categories (name) VALUES (%s) ON CONFLICT DO NOTHING", (name,))
     conn.close()

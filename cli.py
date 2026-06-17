@@ -17,12 +17,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def cmd_init_db(_):
     import psycopg
-    from common import DSN
+    from common import DSN, EMB_DIM
     with open(os.path.join(HERE, "schema.sql"), encoding="utf-8") as f:
-        sql = f.read()
+        sql = f.read().replace("vector(1024)", f"vector({EMB_DIM})")
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(sql)
-    print("Database initialized - schema.sql applied.")
+    print(f"Database initialized - schema.sql applied (embedding dim {EMB_DIM}).")
 
 
 def cmd_index(args):
@@ -36,7 +36,7 @@ def cmd_search(args):
     if not rows:
         print("(no results)"); return
     for r in rows:
-        print(f"• [{r['category']}] {r['title']}\n  {r['snippet']}\n")
+        print(f"- [{r['category']}] {r['title']}\n  {r['snippet']}\n")
 
 
 def cmd_serve(_):

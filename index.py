@@ -4,7 +4,7 @@ INCREMENTAL by default: only files whose content changed (detected via a sha256
 hash stored in the `files` table) are re-embedded. Unchanged files are skipped,
 deleted files are removed from the index.
 
-  python cli.py index           # incremental (fast — only changed files)
+  python cli.py index           # incremental (fast - only changed files)
   python cli.py index --full    # full rebuild (re-embed everything)
 
 A note's top-level folder under NOTES_DIR is its category (e.g. notes/Books/x.md
@@ -23,6 +23,7 @@ from common import connect, embed, NOTES_DIR
 HEADER_RE = re.compile(r'^(#{2,3})\s+(.*)$')
 LINK_RE   = re.compile(r'\[\[([^\]]+?)\]\]')
 SKIP_DIRS = ('/.git/', '/.obsidian/', '/node_modules/')
+MIN_CHUNK_CHARS = 25  # skip trivially short blocks (stray lines, empty sections)
 
 
 def parse_frontmatter(text):
@@ -73,7 +74,7 @@ def process_file(path):
     out = []
     for header, content in split_blocks(body):
         full = (header + '\n' + content).strip() if header else content.strip()
-        if len(full) < 25:
+        if len(full) < MIN_CHUNK_CHARS:
             continue
         title = header.strip() if header else f_title
         links = LINK_RE.findall(full)
@@ -128,7 +129,7 @@ def run(full=False):
     disk_hash = {rel: file_hash(p) for rel, p in disk.items()}
 
     if full:
-        print("Full rebuild…")
+        print("Full rebuild...")
         cur.execute("TRUNCATE chunks RESTART IDENTITY")
         cur.execute("TRUNCATE files")
         changed = sorted(disk)
@@ -145,17 +146,17 @@ def run(full=False):
               f"unchanged: {len(disk) - len(changed)} (skipped)")
 
     if not changed:
-        print("Nothing to do. ✓"); conn.close(); return
+        print("Nothing to do."); conn.close(); return
 
     t0 = time.time()
-    print(f"Embedding {len(changed)} file(s)…")
+    print(f"Embedding {len(changed)} file(s)...")
     n = reindex_files(cur, [disk[r] for r in changed])
     for r in changed:
         cur.execute("""INSERT INTO files (file, hash, updated_at) VALUES (%s, %s, now())
                        ON CONFLICT (file) DO UPDATE SET hash = EXCLUDED.hash, updated_at = now()""",
                     (r, disk_hash[r]))
     cur.execute("SELECT count(*) FROM chunks")
-    print(f"  done in {time.time() - t0:.1f}s — {n} chunks written, {cur.fetchone()[0]} total in index.")
+    print(f"  done in {time.time() - t0:.1f}s - {n} chunks written, {cur.fetchone()[0]} total in index.")
     conn.close()
 
 

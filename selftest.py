@@ -65,7 +65,7 @@ def c_registry_in_sync():
     stale = [f for f in db if f not in disk]
     drift = len(changed) + len(stale)
     return (drift == 0), (f"in sync ({len(disk)} files)" if drift == 0
-                          else f"DRIFT: {len(changed)} changed/new, {len(stale)} stale — run `cli.py index`")
+                          else f"DRIFT: {len(changed)} changed/new, {len(stale)} stale - run `cli.py index`")
 
 def c_chunks_have_registry():
     conn = connect(); cur = conn.cursor()
