@@ -110,6 +110,27 @@ def add_category(c: CategoryIn):
     return {"ok": True}
 
 
+class CategoryRename(BaseModel):
+    old: str
+    new: str
+
+
+@app.post("/api/categories/rename")
+def rename_category(r: CategoryRename):
+    old = r.old.strip()
+    new = r.new.strip()
+    if not new:
+        raise HTTPException(400, "name required")
+    if "/" in new or "\\" in new or new.startswith("."):
+        raise HTTPException(400, "category name cannot contain slashes or start with a dot")
+    conn = connect()
+    conn.execute("UPDATE chunks    SET category = %s WHERE category = %s", (new, old))
+    conn.execute("UPDATE node_tags SET category = %s WHERE category = %s", (new, old))
+    conn.execute("UPDATE categories SET name    = %s WHERE name     = %s", (new, old))
+    conn.close()
+    return {"ok": True}
+
+
 @app.delete("/api/categories/{name}")
 def delete_category(name: str):
     # Removes the category from the list only; existing notes/files are kept.

@@ -113,7 +113,7 @@
     function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-    let Graph, fullData = null, curNote = null, curTag = null, allTags = [], nodeTagCat = {};
+    let Graph, fullData = null, curNote = null, curTag = null, curCat = null, allTags = [], nodeTagCat = {};
     const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
     const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9-]/g, "");
     const adj = {}, inc = {};
@@ -185,9 +185,53 @@
     }
     async function openByTitle(t){ const n = nodeByTitle[t] || nodeBySlug[slugify(t)]; if(n) openNote(n.id); else newNote(t); }
     function openCategory(c){ const node = nodeById["cat:" + c]; if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); } }
+    function openCategoryNode(c){
+      curNote = null; curTag = null; curCat = c;
+      const node = nodeById["cat:" + c];
+      const list = (fullData ? fullData.nodes : []).filter(n => n.group === c
+        && !String(n.id).startsWith("cat:") && !String(n.id).startsWith("tag:"))
+        .sort((a,b)=>String(a.label).localeCompare(String(b.label)));
+      document.getElementById("note-edit").style.display = "";
+      document.getElementById("note-title").textContent = "📂 " + c;
+      document.getElementById("note-tags").innerHTML = "";
+      document.getElementById("note-meta").innerHTML = `${list.length} notes &nbsp;·&nbsp; category`;
+      document.getElementById("note-body").innerHTML = list.length
+        ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${String(b.id).replace(/'/g,"\\'")}')">${esc(b.label)}</div>`).join("") + "</div>"
+        : "No notes.";
+      document.getElementById("note-backlinks").innerHTML = "";
+      document.getElementById("note").classList.add("open");
+      if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); }
+    }
+    function enterCatEdit(){
+      const c = curCat; if(!c) return;
+      document.getElementById("note-tags").innerHTML = "";
+      document.getElementById("note-meta").textContent = "";
+      document.getElementById("note-body").innerHTML =
+        '<div class="field"><label>Category name</label><input class="f" id="cat-name"></div>'
+        + '<div class="edit-actions"><button class="btn blue" id="cat-save">💾 Save</button><button class="btn" id="cat-cancel">Cancel</button><span id="edit-status"></span></div>';
+      document.getElementById("cat-name").value = c;
+      document.getElementById("cat-cancel").onclick = () => openCategoryNode(c);
+      document.getElementById("cat-save").onclick = () => saveCat(c);
+    }
+    async function saveCat(oldName){
+      const st = document.getElementById("edit-status");
+      const name = document.getElementById("cat-name").value.trim();
+      if(!name){ st.textContent = "name required"; return; }
+      if(name === oldName){ openCategoryNode(oldName); return; }
+      st.textContent = "saving...";
+      try {
+        const r = await fetch("/api/categories/rename", {method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({old: oldName, new: name})}).then(r=>r.json());
+        if(!r.ok){ st.textContent = "error: " + (r.detail||"not saved"); return; }
+        if(active.has(oldName)){ active.delete(oldName); active.add(name); }
+        await loadCats(); await reloadGraph();
+        buildLegend(legendGroups()); applyFilter(); saveState({active:[...active], knownGroups: legendGroups()});
+        openCategoryNode(name);
+      } catch(e){ st.textContent = "error: " + e.message; }
+    }
     async function openTag(name){
       const list = await fetch("/api/tag?name="+encodeURIComponent(name)).then(r=>r.json());
-      curNote = null; curTag = name;
+      curNote = null; curTag = name; curCat = null;
       document.getElementById("note-edit").style.display = "";
       document.getElementById("note-title").textContent = "🏷 " + name;
       document.getElementById("note-tags").innerHTML = "";
@@ -207,7 +251,7 @@
       const nt = await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]);
       nodeTagCat = {}; nt.forEach(x => nodeTagCat[x.tag] = x.category);
     }
-    function editCurrent(){ if(curTag) enterTagEdit(); else enterEdit(); }
+    function editCurrent(){ if(curCat) enterCatEdit(); else if(curTag) enterTagEdit(); else enterEdit(); }
     function enterTagEdit(){
       const name = curTag; if(!name) return;
       const isNode = name in nodeTagCat;
@@ -238,7 +282,7 @@
         if(String(id).startsWith("ext:")){ newNote(String(id).slice(4)); return; }
         const n = await fetch("/api/note?file="+encodeURIComponent(id)).then(r=>r.json());
         if(!n || n.error) return;
-        curNote = n; curTag = null;
+        curNote = n; curTag = null; curCat = null;
         document.getElementById("note-edit").style.display = "";
         document.getElementById("note-title").textContent = n.title;
         document.getElementById("note-tags").innerHTML = (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
@@ -370,9 +414,9 @@
         .linkColor(linkColor).linkWidth(0)
         .linkDirectionalParticles(l => hlLinks.size ? (hlLinks.has(l) ? 3 : 0) : 1).linkDirectionalParticleWidth(1.4)
         .onNodeHover(n=>{ document.getElementById("graph").style.cursor = n?"pointer":""; })
-        .onNodeClick(n=>{ const id=String(n.id); if(id.startsWith("tag:")) openTag(n.label); else openNote(n.id, false); })
+        .onNodeClick(n=>{ const id=String(n.id); if(id.startsWith("cat:")) openCategoryNode(n.label); else if(id.startsWith("tag:")) openTag(n.label); else openNote(n.id, false); })
         .onBackgroundClick(()=>{
-          pinnedId=null; curNote=null; curTag=null;
+          pinnedId=null; curNote=null; curTag=null; curCat=null;
           const s=document.getElementById("search"); s.value="";
           searchSet=new Set();
           document.getElementById("search-clear").style.display="none";
