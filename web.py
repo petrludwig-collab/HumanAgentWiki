@@ -40,6 +40,11 @@ HUB_TAG = os.environ.get("HUB_TAG")
 @asynccontextmanager
 async def lifespan(_app):
     ensure_setup()
+    # Warm the embedding model in the background so the first save/search isn't a
+    # 30s "stuck" wait while the model loads on demand.
+    import threading
+    from common import embed
+    threading.Thread(target=lambda: embed(["warmup"]), daemon=True).start()
     yield
 
 
@@ -55,7 +60,11 @@ def _git(*args):
 
 def ensure_setup():
     os.makedirs(NOTES_DIR, exist_ok=True)
-    if not os.path.isdir(os.path.join(NOTES_DIR, ".git")):
+    # Initialise a repo only if NOTES_DIR isn't already inside one — it may be a
+    # subdirectory of a larger repo, where a nested .git would split history.
+    inside = subprocess.run(["git", "-C", NOTES_DIR, "rev-parse", "--is-inside-work-tree"],
+                            capture_output=True, text=True)
+    if inside.stdout.strip() != "true":
         _git("init")
     conn = connect()
     conn.execute("CREATE TABLE IF NOT EXISTS categories "
@@ -198,9 +207,23 @@ def save_note(n: NoteIn):
         raise HTTPException(400, "title required")
     rel = n.file or os.path.join(cat, slugify(title) + ".md")
     path = safe_md_path(rel)
+    # Preserve existing frontmatter (tags, dates, custom fields); only title and
+    # category are edited here — never silently drop the rest of the note's metadata.
+    extra = []
+    if n.file and os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+        if old.startswith("---"):
+            end = old.find("\n---", 3)
+            if end != -1:
+                for line in old[3:end].splitlines():
+                    key = line.split(":", 1)[0].strip() if ":" in line else ""
+                    if key and key not in ("title", "category"):
+                        extra.append(line)
+    front = "\n".join([f"title: {title}", f"category: {cat}", *extra])
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"---\ntitle: {title}\ncategory: {cat}\n---\n\n{n.text.strip()}\n")
+        f.write(f"---\n{front}\n---\n\n{n.text.strip()}\n")
     # git versioning: every save is a commit
     _git("add", "-A")
     _git("commit", "-m", f"{'edit' if n.file else 'add'}: {title}")
