@@ -17,6 +17,31 @@ HumanAgentWiki turns *your own notes* (plain Markdown) into a shared, searchable
 - 🌍 **Multilingual.** Uses [BGE-M3](https://huggingface.co/BAAI/bge-m3) embeddings — excellent for Czech and 100+ languages, not just English.
 - 🔌 **Agent-native.** Exposes an MCP server, so Claude and other MCP clients connect with zero glue code. Multiple agents share one brain.
 
+## Install
+
+One line:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/petrludwig-collab/HumanAgentWiki/main/install.sh | bash
+```
+
+Or clone and run the installer:
+
+```bash
+git clone https://github.com/petrludwig-collab/HumanAgentWiki.git
+cd HumanAgentWiki && ./install.sh
+```
+
+It checks prerequisites, creates a virtualenv, installs dependencies, brings up PostgreSQL (Docker if available, otherwise a local instance), writes `.env`, and creates the schema. Then use the `./haw` launcher:
+
+```bash
+./haw index     # index your notes (Markdown under ./notes)
+./haw web       # web UI at http://127.0.0.1:8808
+./haw serve     # MCP server for your agents
+```
+
+> Try it instantly with the bundled demo: `NOTES_DIR=./sample_notes ./haw index && ./haw web`
+
 ## How it works (plain English)
 
 1. Your notes are **Markdown files**, linked like a wiki with `[[links]]`.
@@ -25,7 +50,7 @@ HumanAgentWiki turns *your own notes* (plain Markdown) into a shared, searchable
 4. **Incremental indexing** — only changed files get re-embedded (seconds, not minutes).
 5. An **MCP server** (`brain_search` / `brain_get` / `brain_neighbors`) lets your agents query it live.
 
-## Categories — no config files
+## Categories - no config files
 
 You define your top-level **categories right in the app** (add/remove with +/–) — e.g. *Books, Podcast, Interviews, Notes* — and start saving into them. No YAML, no config editing. On first run you get **sample notes + a built-in guide** so you instantly see how it works.
 

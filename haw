@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Convenience launcher: load .env and run the CLI inside the project's venv.
+#   ./haw index | search "..." | serve | web | init-db | selftest
+cd "$(dirname "$0")"
+set -a; [ -f .env ] && . ./.env; set +a
+exec .venv/bin/python cli.py "$@"
