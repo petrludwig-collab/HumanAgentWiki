@@ -147,8 +147,8 @@ def get_note(file: str):
     crow = cur.fetchone()
     category = crow["category"] if crow else index.category_label(
         fm.get("category") or fm.get("project") or index.category_of(file))
-    cur.execute("SELECT DISTINCT file, title FROM chunks WHERE %s = ANY(links) AND file <> %s",
-                (title, file))
+    cur.execute("SELECT DISTINCT ON (file) file, title FROM chunks "
+                "WHERE %s = ANY(links) AND file <> %s ORDER BY file, id", (title, file))
     backlinks = [{"id": r["file"], "label": r["title"]} for r in cur.fetchall()]
     conn.close()
     return {"id": file, "title": title, "category": category, "body": body.strip(),
@@ -254,7 +254,8 @@ def tags_list():
 @app.get("/api/tag")
 def tag_notes(name: str):
     conn = connect(); cur = conn.cursor(row_factory=dict_row)
-    cur.execute("SELECT DISTINCT file, title FROM chunks WHERE %s = ANY(tags) ORDER BY title", (name,))
+    cur.execute("SELECT file, title FROM (SELECT DISTINCT ON (file) file, title FROM chunks "
+                "WHERE %s = ANY(tags) ORDER BY file, id) s ORDER BY title", (name,))
     out = [{"id": r["file"], "label": r["title"]} for r in cur.fetchall()]
     conn.close()
     return out
