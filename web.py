@@ -180,7 +180,7 @@ def graph():
     """Nodes (one per note file) and links (from [[wikilinks]]) for the 3D view."""
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
-    cur.execute("SELECT DISTINCT ON (file) file, title, category, node_type FROM chunks ORDER BY file, id")
+    cur.execute("SELECT DISTINCT ON (file) file, title, category, node_type, tags FROM chunks ORDER BY file, id")
     base = cur.fetchall()
     cur.execute("SELECT file, array_agg(DISTINCT l) AS links "
                 "FROM chunks CROSS JOIN LATERAL unnest(links) AS l GROUP BY file")
@@ -194,7 +194,8 @@ def graph():
     # brains link by slug (filename), not by title - so resolve [[X]] against both.
     slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
-                         "val": 54 if r["node_type"] == "hub" else 2} for r in base}
+                         "val": 54 if r["node_type"] == "hub" else 2,
+                         "tags": r["tags"] or []} for r in base}
     # categories are nodes too: one hub per category; every note links to it.
     for c in sorted({r["category"] for r in base}):
         nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 54, "is_cat": True}

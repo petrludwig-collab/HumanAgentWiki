@@ -244,7 +244,7 @@
       const q = document.getElementById("search").value.trim().toLowerCase();
       const box = document.getElementById("results");
       searchSet = new Set();
-      if(q.length>=2) for(const n of Object.values(nodeById)) if((n.label||"").toLowerCase().includes(q)) searchSet.add(n.id);
+      if(q.length>=2) for(const n of Object.values(nodeById)) if((n.label||"").toLowerCase().includes(q) || (n.tags||[]).some(t=>String(t).toLowerCase().includes(q))) searchSet.add(n.id);
       refreshStyles();
       if(!q){ box.innerHTML=""; return; }
       const hits = Object.values(nodeById).filter(n=>(n.label||"").toLowerCase().includes(q)).sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
@@ -315,21 +315,29 @@
 
       // map labels for big nodes (hubs)
       const labelLayer = document.getElementById("maplabels");
-      // label only the most important nodes (hubs + most connected) - far fewer on screen
-      const mapLabels = data.nodes
-        .map(n => [n, (n.val || 0) * 1000 + ((adj[n.id] && adj[n.id].size) || 0)])
-        .sort((a, b) => b[1] - a[1]).slice(0, 22)
-        .map(([n]) => { const el=document.createElement("div"); el.className="map-label"; el.textContent=(n.label||"").slice(0,28); el.style.display="none"; labelLayer.appendChild(el); return {n,el}; });
+      // every node gets a hidden label; by default only the ~22 most important show,
+      // but while searching we show a label on every matched node.
+      const topIds = new Set(data.nodes
+        .map(n => [n.id, (n.val || 0) * 1000 + ((adj[n.id] && adj[n.id].size) || 0)])
+        .sort((a, b) => b[1] - a[1]).slice(0, 22).map(([id]) => id));
+      const mapLabels = data.nodes.map(n => {
+        const el = document.createElement("div"); el.className = "map-label";
+        el.textContent = (n.label || "").slice(0, 28); el.style.display = "none";
+        labelLayer.appendChild(el); return {n, el};
+      });
       let labelsOn = (saved.labels!==false), frames=0, lastFps=performance.now();
       function updateLabels(){
         if(!labelsOn) return; frames++;
         const now=performance.now(); if(now-lastFps>1000){ const el=document.getElementById("fps"); if(el) el.textContent=" · "+Math.round(frames*1000/(now-lastFps))+" fps"; frames=0; lastFps=now; }
         const cam=Graph.camera(), V3=cam.position.constructor, fwd=cam.getWorldDirection(new V3());
+        const searching = searchSet.size > 0;
         for(const {n,el} of mapLabels){
-          if(!active.has(n.group)||n.x==null){ el.style.display="none"; continue; }
+          const want = searching ? searchSet.has(n.id) : topIds.has(n.id);
+          if(!want || !active.has(n.group) || n.x==null){ el.style.display="none"; continue; }
           const dx=n.x-cam.position.x, dy=n.y-cam.position.y, dz=(n.z||0)-cam.position.z;
-          if(dx*fwd.x+dy*fwd.y+dz*fwd.z<=0){ el.style.display="none"; continue; }
-          const dist=Math.hypot(dx,dy,dz); const maxDist=n.val>=54?4200:1700; if(dist>maxDist){ el.style.display="none"; continue; }
+          if(dx*fwd.x+dy*fwd.y+dz*fwd.z<=0){ el.style.display="none"; continue; }   // behind camera
+          const dist=Math.hypot(dx,dy,dz);
+          if(!searching){ const maxDist=n.val>=54?4200:1700; if(dist>maxDist){ el.style.display="none"; continue; } }
           const c=Graph.graph2ScreenCoords(n.x,n.y,n.z||0);
           el.style.display=""; el.style.fontSize=Math.max(9,Math.min(13,15-dist/400))+"px"; el.style.left=c.x+"px"; el.style.top=c.y+"px";
         }
