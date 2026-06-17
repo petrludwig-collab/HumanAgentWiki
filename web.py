@@ -216,7 +216,7 @@ def graph():
         if node.get("is_cat") or node["val"] == 54:   # category hubs / explicit hubs stay big
             continue
         d = degree.get(nid, 0)
-        node["val"] = 54 if d >= 10 else 16 if d >= 4 else 2
+        node["val"] = 16 if d >= 4 else 2   # 54 reserved for hubs/categories, like the brain
     return {"nodes": list(nodes.values()), "links": links}
 
 
