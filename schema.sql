@@ -46,5 +46,6 @@ CREATE TABLE IF NOT EXISTS categories (
 -- every note carrying it (or, if a note with the same title exists, links them to it).
 CREATE TABLE IF NOT EXISTS node_tags (
     tag         text PRIMARY KEY,
+    category    text,                   -- which category the tag-node belongs to (its colour/group)
     created_at  timestamptz DEFAULT now()
 );

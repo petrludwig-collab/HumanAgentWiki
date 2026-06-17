@@ -96,7 +96,7 @@
   <div id="graph"></div>
   <div id="note">
     <button class="close" onclick="closeNote()">×</button>
-    <button class="edit" id="note-edit" title="Edit" onclick="enterEdit()">✎</button>
+    <button class="edit" id="note-edit" title="Edit" onclick="editCurrent()">✎</button>
     <h2 id="note-title"></h2>
     <div id="note-tags"></div>
     <div class="meta" id="note-meta"></div>
@@ -113,7 +113,7 @@
     function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-    let Graph, fullData = null, curNote = null, allTags = [], nodeTagSet = new Set();
+    let Graph, fullData = null, curNote = null, curTag = null, allTags = [], nodeTagCat = {};
     const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
     const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9-]/g, "");
     const adj = {}, inc = {};
@@ -174,7 +174,7 @@
       return cats.map(c=>`<option${c===sel?" selected":""}>${esc(c)}</option>`).join("");
     }
     function newNote(title){
-      curNote = {id:null, title:title||"", category:categories[0]||"", body:"", backlinks:[]};
+      curNote = {id:null, title:title||"", category:categories[0]||"", body:"", backlinks:[]}; curTag = null;
       document.getElementById("note-edit").style.display = "none";
       document.getElementById("note-title").textContent = "New note";
       document.getElementById("note-tags").innerHTML = "";
@@ -187,12 +187,12 @@
     function openCategory(c){ const node = nodeById["cat:" + c]; if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); } }
     async function openTag(name){
       const list = await fetch("/api/tag?name="+encodeURIComponent(name)).then(r=>r.json());
-      curNote = null;
-      document.getElementById("note-edit").style.display = "none";
+      curNote = null; curTag = name;
+      document.getElementById("note-edit").style.display = "";
       document.getElementById("note-title").textContent = "🏷 " + name;
       document.getElementById("note-tags").innerHTML = "";
-      const _isNode = nodeTagSet.has(name);
-      document.getElementById("note-meta").innerHTML = `${list.length} notes &nbsp;·&nbsp; <span class="makenode" onclick="toggleNodeTag('${name.replace(/'/g,"\\'")}')">${_isNode ? "● is a node (remove)" : "＋ Make a node"}</span>`;
+      const _info = (name in nodeTagCat) ? ` &nbsp;·&nbsp; ● node in ${esc(nodeTagCat[name] || "?")}` : "";
+      document.getElementById("note-meta").innerHTML = `${list.length} notes${_info}`;
       document.getElementById("note-body").innerHTML = list.length
         ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${b.id.replace(/'/g,"\\'")}')">${esc(b.label)}</div>`).join("") + "</div>"
         : "No notes.";
@@ -203,13 +203,34 @@
       refreshStyles();
       document.getElementById("search-clear").style.display = "inline";
     }
-    async function toggleNodeTag(name){
-      if(nodeTagSet.has(name)) await fetch("/api/node-tags/"+encodeURIComponent(name), {method:"DELETE"});
-      else await fetch("/api/node-tags", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({tag:name})});
-      nodeTagSet = new Set(await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]));
-      await reloadGraph();
-      active.add(name); buildLegend(legendGroups()); applyFilter();
-      saveState({active:[...active], knownGroups: legendGroups()});
+    async function refreshNodeTags(){
+      const nt = await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]);
+      nodeTagCat = {}; nt.forEach(x => nodeTagCat[x.tag] = x.category);
+    }
+    function editCurrent(){ if(curTag) enterTagEdit(); else enterEdit(); }
+    function enterTagEdit(){
+      const name = curTag; if(!name) return;
+      const isNode = name in nodeTagCat;
+      const cats = legendGroups().filter(c => c !== "(unresolved)" && !(c in nodeTagCat));
+      const curCat = nodeTagCat[name] || cats[0] || "";
+      document.getElementById("note-tags").innerHTML = "";
+      document.getElementById("note-meta").textContent = "";
+      document.getElementById("note-body").innerHTML =
+        '<div class="field"><label>Category</label><select class="f" id="tag-cat">'
+        + cats.map(c=>`<option${c===curCat?" selected":""}>${esc(c)}</option>`).join("") + '</select></div>'
+        + '<div class="field"><label style="cursor:pointer"><input type="checkbox" id="tag-isnode" '+(isNode?"checked":"")+'> Tag is also a node (links all its records)</label></div>'
+        + '<div class="edit-actions"><button class="btn blue" id="tag-save">💾 Save</button><button class="btn" id="tag-cancel">Cancel</button><span id="edit-status"></span></div>';
+      document.getElementById("tag-cancel").onclick = () => openTag(name);
+      document.getElementById("tag-save").onclick = () => saveTag(name);
+    }
+    async function saveTag(name){
+      const isNode = document.getElementById("tag-isnode").checked;
+      const cat = document.getElementById("tag-cat").value;
+      if(isNode) await fetch("/api/node-tags", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({tag:name, category:cat})});
+      else await fetch("/api/node-tags/"+encodeURIComponent(name), {method:"DELETE"});
+      await refreshNodeTags(); await reloadGraph();
+      if(isNode && cat) active.add(cat);
+      buildLegend(legendGroups()); applyFilter(); saveState({active:[...active], knownGroups: legendGroups()});
       openTag(name);
     }
     async function openNote(id, focus=true){
@@ -217,7 +238,7 @@
         if(String(id).startsWith("ext:")){ newNote(String(id).slice(4)); return; }
         const n = await fetch("/api/note?file="+encodeURIComponent(id)).then(r=>r.json());
         if(!n || n.error) return;
-        curNote = n;
+        curNote = n; curTag = null;
         document.getElementById("note-edit").style.display = "";
         document.getElementById("note-title").textContent = n.title;
         document.getElementById("note-tags").innerHTML = (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
@@ -329,7 +350,7 @@
     (async () => {
       await loadCats();
       allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);
-      nodeTagSet = new Set(await fetch("/api/node-tags").then(r=>r.json()).catch(()=>[]));
+      await refreshNodeTags();
       const data = await fetch("/api/graph").then(r=>r.json());
       ingest(data);
       const groups = legendGroups();

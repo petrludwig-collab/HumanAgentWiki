@@ -61,7 +61,8 @@ def ensure_setup():
     conn.execute("CREATE TABLE IF NOT EXISTS categories "
                  "(name text PRIMARY KEY, created_at timestamptz DEFAULT now())")
     conn.execute("CREATE TABLE IF NOT EXISTS node_tags "
-                 "(tag text PRIMARY KEY, created_at timestamptz DEFAULT now())")
+                 "(tag text PRIMARY KEY, category text, created_at timestamptz DEFAULT now())")
+    conn.execute("ALTER TABLE node_tags ADD COLUMN IF NOT EXISTS category text")
     conn.close()
 
 
@@ -203,8 +204,8 @@ def graph():
     cur.execute("SELECT file, array_agg(DISTINCT l) AS links "
                 "FROM chunks CROSS JOIN LATERAL unnest(links) AS l GROUP BY file")
     links_by_file = {r["file"]: r["links"] for r in cur.fetchall()}
-    cur.execute("SELECT tag FROM node_tags")
-    node_tag_set = {r["tag"] for r in cur.fetchall()}
+    cur.execute("SELECT tag, category FROM node_tags")
+    node_tag_cats = {r["tag"]: r["category"] for r in cur.fetchall()}
     conn.close()
     title_to_file = {r["title"]: r["file"] for r in base}
 
@@ -230,11 +231,11 @@ def graph():
             links.append({"source": src, "target": dst})
     # node-tags: a tag promoted to a node links every note carrying it to that node
     # (an existing note with the same title, otherwise a synthetic tag node).
-    for tagname in node_tag_set:
+    for tagname, tcat in node_tag_cats.items():
         target = title_to_file.get(tagname)
         if target is None:
             target = "tag:" + tagname
-            nodes.setdefault(target, {"id": target, "label": tagname, "group": tagname,
+            nodes.setdefault(target, {"id": target, "label": tagname, "group": tcat or tagname,
                                       "val": 16, "tags": []})
         for r in base:
             if tagname in (r["tags"] or []):
@@ -274,14 +275,15 @@ def tag_notes(name: str):
 @app.get("/api/node-tags")
 def node_tags_list():
     conn = connect(); cur = conn.cursor()
-    cur.execute("SELECT tag FROM node_tags ORDER BY tag")
-    out = [r[0] for r in cur.fetchall()]
+    cur.execute("SELECT tag, category FROM node_tags ORDER BY tag")
+    out = [{"tag": r[0], "category": r[1]} for r in cur.fetchall()]
     conn.close()
     return out
 
 
 class TagIn(BaseModel):
     tag: str
+    category: str | None = None
 
 
 @app.post("/api/node-tags")
@@ -290,7 +292,8 @@ def node_tag_add(t: TagIn):
     if not name:
         raise HTTPException(400, "tag required")
     conn = connect()
-    conn.execute("INSERT INTO node_tags (tag) VALUES (%s) ON CONFLICT DO NOTHING", (name,))
+    conn.execute("INSERT INTO node_tags (tag, category) VALUES (%s, %s) "
+                 "ON CONFLICT (tag) DO UPDATE SET category = EXCLUDED.category", (name, t.category))
     conn.close()
     return {"ok": True}
 
