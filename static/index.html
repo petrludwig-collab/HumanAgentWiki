@@ -371,7 +371,14 @@
         .linkDirectionalParticles(l => hlLinks.size ? (hlLinks.has(l) ? 3 : 0) : 1).linkDirectionalParticleWidth(1.4)
         .onNodeHover(n=>{ document.getElementById("graph").style.cursor = n?"pointer":""; })
         .onNodeClick(n=>{ const id=String(n.id); if(id.startsWith("tag:")) openTag(n.label); else openNote(n.id, false); })
-        .onBackgroundClick(()=>{ pinnedId=null; setHighlight(null); })
+        .onBackgroundClick(()=>{
+          pinnedId=null; curNote=null; curTag=null;
+          const s=document.getElementById("search"); s.value="";
+          searchSet=new Set();
+          document.getElementById("search-clear").style.display="none";
+          document.getElementById("results").innerHTML="";
+          closeNote(); refreshStyles();
+        })
         .onNodeDrag(()=>{ if(!dragReheated){ dragReheated=true; Graph.d3ReheatSimulation(); } })
         .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; });
       Graph.d3Force("charge").strength(-60);
