@@ -19,6 +19,12 @@
     #results .res { padding: 5px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
     #results .restag { color: #c084fc; }
     #results .rescat { color: #fbbf24; font-weight: 600; }
+    #note .catsec { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }
+    #note .catlist .res { padding: 4px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
+    #note .catlist .res:hover { background: #1e293b; }
+    #note .catlist .restag { color: #c084fc; }
+    #note .catlist .restag-node { color: #e9d5ff; font-weight: 700; }
+    #note .catlist .restype { color: #64748b; }
     #results .restag-node { color: #e9d5ff; font-weight: 700; }
     #results .restag-node b { font-weight: 700; }
     #note .notelist .nl { display: block; padding: 5px 7px; color: #cbd5e1; cursor: pointer; border-radius: 6px; font-size: 12px; }
@@ -195,13 +201,25 @@
       const list = (fullData ? fullData.nodes : []).filter(n => n.group === c
         && !String(n.id).startsWith("cat:") && !String(n.id).startsWith("tag:"))
         .sort((a,b)=>String(a.label).localeCompare(String(b.label)));
+      // tags used by notes in this category (node-tags first, then by count)
+      const cnt = {};
+      list.forEach(n => (n.tags||[]).forEach(t => cnt[t] = (cnt[t]||0)+1));
+      const tags = Object.keys(cnt).map(t=>({tag:t, count:cnt[t]}))
+        .sort((a,b)=> ((b.tag in nodeTagCat)?1:0) - ((a.tag in nodeTagCat)?1:0) || b.count - a.count || a.tag.localeCompare(b.tag));
+      const q1 = s => String(s).replace(/'/g,"\\'");
       document.getElementById("note-edit").style.display = "";
       document.getElementById("note-title").textContent = "📂 " + c;
       document.getElementById("note-tags").innerHTML = "";
-      document.getElementById("note-meta").innerHTML = `${list.length} notes &nbsp;·&nbsp; category`;
-      document.getElementById("note-body").innerHTML = list.length
-        ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${String(b.id).replace(/'/g,"\\'")}')">${esc(b.label)}</div>`).join("") + "</div>"
+      document.getElementById("note-meta").innerHTML = `${list.length} notes &nbsp;·&nbsp; ${tags.length} tags`;
+      const tagsHtml = tags.map(t=>{ const nd = t.tag in nodeTagCat;
+        return `<div class="res restag${nd?' restag-node':''}" onclick="openTag('${q1(t.tag)}')">🏷 ${nd?'<b>'+esc(t.tag)+'</b>':esc(t.tag)} <span class="restype">(${t.count})</span></div>`;
+      }).join("");
+      const notesHtml = list.length
+        ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${q1(b.id)}')">${esc(b.label)}</div>`).join("") + "</div>"
         : "No notes.";
+      document.getElementById("note-body").innerHTML =
+        (tags.length ? '<h3 class="catsec">Tags</h3><div class="catlist">' + tagsHtml + '</div>' : "")
+        + '<h3 class="catsec">Notes</h3>' + notesHtml;
       document.getElementById("note-backlinks").innerHTML = "";
       document.getElementById("note").classList.add("open");
       if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); }
