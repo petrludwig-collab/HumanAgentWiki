@@ -276,7 +276,7 @@
         .backgroundColor("#0b0f1a")
         .nodeLabel(n => n.label)
         .nodeColor(nodeColor).nodeVal(n=>n.val).nodeOpacity(0.95)
-        .linkColor(linkColor).linkWidth(0.6)
+        .linkColor(linkColor).linkWidth(0)
         .linkDirectionalParticles(l => hlLinks.has(l) ? 3 : 1).linkDirectionalParticleWidth(1.4)
         .onNodeHover(n=>{ document.getElementById("graph").style.cursor = n?"pointer":""; })
         .onNodeClick(n=>{ openNote(n.id, false); })
