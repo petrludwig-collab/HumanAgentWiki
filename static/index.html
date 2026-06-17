@@ -124,6 +124,20 @@
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
     let Graph, fullData = null, curNote = null, curTag = null, curCat = null, allTags = [], nodeTagCat = {};
+    let mapLabels = [], labelLayerEl = null, labelsOn = true;
+    // Rebuild the HTML label overlay from the graph's CURRENT node objects. Must run
+    // after every Graph.graphData() swap — otherwise labels keep referencing stale
+    // (frozen) node objects and stick to the wrong screen positions.
+    function rebuildMapLabels(){
+      if(!labelLayerEl || !Graph) return;
+      labelLayerEl.innerHTML = "";
+      const ns = (Graph.graphData().nodes) || [];
+      mapLabels = ns.map(n => {
+        const el = document.createElement("div"); el.className = "map-label";
+        el.textContent = (n.label || "").slice(0, 28); el.style.display = "none";
+        labelLayerEl.appendChild(el); return {n, el};
+      });
+    }
     const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
     const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9-]/g, "");
     const adj = {}, inc = {};
@@ -165,6 +179,7 @@
       const ids = new Set(nodes.map(n=>n.id));
       const links = fullData.links.filter(l => { const s=(l.source&&l.source.id)||l.source, t=(l.target&&l.target.id)||l.target; return ids.has(s)&&ids.has(t); });
       Graph.graphData({nodes, links});
+      rebuildMapLabels();
       document.getElementById("stats").innerHTML = `${nodes.length} nodes · ${links.length} links <span id="fps"></span>`;
     }
 
@@ -417,7 +432,7 @@
     });
     function acPick(i){ const ta=acTA, pos=ta.selectionStart; ta.value = ta.value.slice(0,pos).replace(/\[\[([^\]]*)$/,"[["+acItems[i]+"]]")+ta.value.slice(pos); document.getElementById("ac").style.display="none"; ta.focus(); }
 
-    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); buildLegend(legendGroups()); }
+    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); rebuildMapLabels(); buildLegend(legendGroups()); }
     function ingest(data){
       fullData = data;
       for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k]; for(const k in nodeBySlug) delete nodeBySlug[k];
@@ -466,16 +481,13 @@
       Graph.d3Force("charge").strength(-60);
       applyFilter();
 
-      // map labels for big nodes (hubs)
-      const labelLayer = document.getElementById("maplabels");
-      // every node gets a hidden label; by default only Level 2/3 (val>=16: categories
-      // and node-tags) show; while searching we show a label on every matched node.
-      const mapLabels = data.nodes.map(n => {
-        const el = document.createElement("div"); el.className = "map-label";
-        el.textContent = (n.label || "").slice(0, 28); el.style.display = "none";
-        labelLayer.appendChild(el); return {n, el};
-      });
-      let labelsOn = (saved.labels!==false), frames=0, lastFps=performance.now();
+      // map labels for big nodes (hubs); every node gets a hidden label and by default
+      // only Level 2/3 (val>=16: categories and node-tags) show; while searching we show
+      // a label on every matched node. Built from current graph nodes, rebuilt on reload.
+      labelLayerEl = document.getElementById("maplabels");
+      rebuildMapLabels();
+      labelsOn = (saved.labels!==false);
+      let frames=0, lastFps=performance.now();
       function updateLabels(){
         if(!labelsOn) return; frames++;
         const now=performance.now(); if(now-lastFps>1000){ const el=document.getElementById("fps"); if(el) el.textContent=" · "+Math.round(frames*1000/(now-lastFps))+" fps"; frames=0; lastFps=now; }
