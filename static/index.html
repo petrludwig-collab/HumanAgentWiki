@@ -10,7 +10,10 @@
     #graph { width: 100vw; height: 100vh; }
     #panel { position: fixed; top: 12px; left: 12px; z-index: 10; width: 264px; background: rgba(15,23,42,.82); border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; font-size: 13px; backdrop-filter: blur(6px); }
     #panel h1 { font-size: 14px; margin: 0 0 8px; }
-    #search { width: 100%; box-sizing: border-box; margin: 4px 0 6px; padding: 6px 9px; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 8px; color: #e5e7eb; font-size: 13px; }
+    .searchbox { position: relative; }
+    #search { width: 100%; box-sizing: border-box; margin: 4px 0 6px; padding: 6px 26px 6px 9px; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 8px; color: #e5e7eb; font-size: 13px; }
+    #search-clear { position: absolute; right: 8px; top: 9px; color: #64748b; cursor: pointer; font-size: 17px; line-height: 1; display: none; }
+    #search-clear:hover { color: #e5e7eb; }
     #search::placeholder { color: #64748b; }
     #results { max-height: 38vh; overflow-y: auto; margin-bottom: 6px; }
     #results .res { padding: 5px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
@@ -72,7 +75,10 @@
 <body>
   <div id="panel">
     <h1>🧠 HumanAgentWiki</h1>
-    <input id="search" type="text" placeholder="🔍 Search notes..." oninput="runSearch()" autocomplete="off" />
+    <div class="searchbox">
+      <input id="search" type="text" placeholder="🔍 Search notes..." oninput="runSearch()" autocomplete="off" />
+      <span id="search-clear" title="Clear search" onclick="clearSearch()">×</span>
+    </div>
     <div id="results"></div>
     <div id="legend"></div>
     <button class="btn blue" id="newnote" onclick="newNote()">+ New note</button>
@@ -240,9 +246,13 @@
     function legendGroups(){ const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group)); return [...gs].sort(); }
 
     // search (client-side over node labels)
+    function clearSearch(){
+      const s = document.getElementById("search"); s.value = ""; runSearch(); s.focus();
+    }
     function runSearch(){
       const q = document.getElementById("search").value.trim().toLowerCase();
       const box = document.getElementById("results");
+      document.getElementById("search-clear").style.display = q ? "inline" : "none";
       searchSet = new Set();
       if(q.length>=2) for(const n of Object.values(nodeById)) if((n.label||"").toLowerCase().includes(q) || (n.tags||[]).some(t=>String(t).toLowerCase().includes(q))) searchSet.add(n.id);
       refreshStyles();
