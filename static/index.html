@@ -379,11 +379,8 @@
 
       // map labels for big nodes (hubs)
       const labelLayer = document.getElementById("maplabels");
-      // every node gets a hidden label; by default only the ~22 most important show,
-      // but while searching we show a label on every matched node.
-      const topIds = new Set(data.nodes
-        .map(n => [n.id, (n.val || 0) * 1000 + ((adj[n.id] && adj[n.id].size) || 0)])
-        .sort((a, b) => b[1] - a[1]).slice(0, 22).map(([id]) => id));
+      // every node gets a hidden label; by default only Level 2/3 (val>=16: categories
+      // and node-tags) show; while searching we show a label on every matched node.
       const mapLabels = data.nodes.map(n => {
         const el = document.createElement("div"); el.className = "map-label";
         el.textContent = (n.label || "").slice(0, 28); el.style.display = "none";
@@ -396,7 +393,7 @@
         const cam=Graph.camera(), V3=cam.position.constructor, fwd=cam.getWorldDirection(new V3());
         const searching = searchSet.size > 0;
         for(const {n,el} of mapLabels){
-          const want = searching ? searchSet.has(n.id) : topIds.has(n.id);
+          const want = searching ? searchSet.has(n.id) : ((n.val || 0) >= 16);
           if(!want || !active.has(n.group) || n.x==null){ el.style.display="none"; continue; }
           const dx=n.x-cam.position.x, dy=n.y-cam.position.y, dz=(n.z||0)-cam.position.z;
           if(dx*fwd.x+dy*fwd.y+dz*fwd.z<=0){ el.style.display="none"; continue; }   // behind camera

@@ -215,8 +215,7 @@ def graph():
     # brains link by slug (filename), not by title - so resolve [[X]] against both.
     slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
-                         "tags": r["tags"] or [],
-                         "val": 16 if (r["node_type"] == "hub" or (HUB_TAG and HUB_TAG in (r["tags"] or []))) else 0.7}
+                         "tags": r["tags"] or [], "val": 0.7}     # Level 1; categories=54, node-tags=16
              for r in base}
     # categories are nodes too: one hub per category; every note links to it.
     for c in sorted({r["category"] for r in base}):
@@ -235,8 +234,10 @@ def graph():
         target = title_to_file.get(tagname)
         if target is None:
             target = "tag:" + tagname
-            nodes.setdefault(target, {"id": target, "label": tagname, "group": tcat or tagname,
-                                      "val": 16, "tags": []})
+            nodes[target] = {"id": target, "label": tagname, "group": tcat or tagname,
+                             "val": 16, "tags": []}
+        elif target in nodes:
+            nodes[target]["val"] = 16            # Level 2: an existing record used as a node-tag
         for r in base:
             if tagname in (r["tags"] or []):
                 links.append({"source": r["file"], "target": target})
