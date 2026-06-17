@@ -73,6 +73,13 @@ Tools exposed: `brain_search`, `brain_get`, `brain_neighbors`.
 - **Note editor** — pick a category, write, and link other notes with `[[...]]` (autocomplete). Saving writes a Markdown file, **commits it to git** (full history), and re-indexes it.
 - **Search** — semantic search across everything.
 
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+pytest        # unit tests for the pure helpers (no DB needed)
+```
+
 ## On the roadmap
 
 - 🔮 **3D visualization** of the note graph (rotate / zoom / focus a slice).

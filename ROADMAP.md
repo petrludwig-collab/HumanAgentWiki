@@ -20,10 +20,20 @@ HumanAgentWiki is being generalized from a working private system into a tool an
 - [x] **Note editor** — category + title + body, `[[...]]` link autocomplete.
 - [x] **Git versioning** — every save commits the Markdown file (full history).
 
+## Done — quality pass (v0.3)
+- [x] **Dict-row DB access** in `server.py` (named columns, no brittle positional indices).
+- [x] **Unit tests** (`tests/`, pytest) for the pure helpers.
+- [x] **Hardening**: category-name path checks, ASCII-only stdout, `EMB_DIM` wired into `init-db`.
+
 ## Next
 - [ ] **3D visualization** of the note graph (rotate / zoom / focus a slice).
 - [ ] Inline render of `[[links]]` as clickable links in a read view.
 - [ ] Optional auth for exposing the web UI beyond localhost.
+
+## Design decisions
+- **No connection pool (intentional).** This is a local, single-user tool; a
+  connection-per-request keeps the code simple and dependency-light. Revisit only
+  if it's deployed for real concurrency.
 
 ## Principles
 - **Local & private by default.** Your notes never leave your machine.
