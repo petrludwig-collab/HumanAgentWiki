@@ -57,6 +57,7 @@
     #note-tags { margin: 4px 0 2px; }
     #note-tags .tag { display: inline-block; font-size: 11px; color: #cbd5e1; background: #1e293b; border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; cursor: pointer; }
     #note-tags .tag:hover { background: #334155; }
+    #note-tags .tag-node { font-weight: 700; color: #e9d5ff; background: #2e1065; }
     #note-tags .catchip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #e5e7eb; background: #0b0f1a; border: 1px solid #334155; border-radius: 6px; padding: 2px 8px; margin: 2px 6px 2px 0; cursor: pointer; }
     #note-tags .catchip:hover { border-color: #5b8cff; }
     #note-tags .catchip .dot { width: 8px; height: 8px; }
@@ -287,7 +288,11 @@
         curNote = n; curTag = null; curCat = null;
         document.getElementById("note-edit").style.display = "";
         document.getElementById("note-title").textContent = n.title;
-        document.getElementById("note-tags").innerHTML = (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
+        document.getElementById("note-tags").innerHTML = (n.tags||[]).slice()
+          .sort((a,b)=> ((String(b) in nodeTagCat)?1:0) - ((String(a) in nodeTagCat)?1:0))   // node-tags first
+          .map(t=>{ const nd = String(t) in nodeTagCat;
+            return `<span class="tag${nd?' tag-node':''}" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${nd?'● ':''}${esc(t)}</span>`;
+          }).join("");
         const _c = n.category || "";
         document.getElementById("note-meta").innerHTML = (_c ? `<span class="metacat" onclick="openCategory('${_c.replace(/'/g,"\\'")}')">${esc(_c)}</span> - ` : "") + esc(n.id);
         document.getElementById("note-body").innerHTML = renderBody(n.body);
