@@ -3,3 +3,5 @@ pgvector>=0.2.5
 sentence-transformers>=2.7
 torch>=2.2
 mcp>=1.2
+fastapi>=0.110
+uvicorn>=0.29

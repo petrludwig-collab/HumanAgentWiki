@@ -32,3 +32,10 @@ CREATE INDEX IF NOT EXISTS chunks_hnsw  ON chunks USING hnsw (embedding vector_c
 CREATE INDEX IF NOT EXISTS chunks_tsv   ON chunks USING gin (tsv);
 CREATE INDEX IF NOT EXISTS chunks_links ON chunks USING gin (links);
 CREATE INDEX IF NOT EXISTS chunks_trgm  ON chunks USING gin (text gin_trgm_ops);
+
+-- User-defined categories, managed from the web UI (+/-). Notes reference a
+-- category via their YAML frontmatter; this table is the canonical list.
+CREATE TABLE IF NOT EXISTS categories (
+    name        text PRIMARY KEY,
+    created_at  timestamptz DEFAULT now()
+);

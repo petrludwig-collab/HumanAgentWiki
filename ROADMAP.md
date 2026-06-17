@@ -14,11 +14,16 @@ HumanAgentWiki is being generalized from a working private system into a tool an
 - [x] **Self-test battery** — DB, embeddings, indexes, incremental-sync, registry consistency.
 - [x] **Onboarding demo** — bundled `sample_notes/` (guide + linked examples).
 
+## Done — web UI (v0.2)
+- [x] **Web UI** (`cli.py web`) — wiki-style, no build step (vanilla JS).
+- [x] **Categories managed in the UI** — add/remove with +/–, stored in the DB.
+- [x] **Note editor** — category + title + body, `[[...]]` link autocomplete.
+- [x] **Git versioning** — every save commits the Markdown file (full history).
+
 ## Next
 - [ ] **3D visualization** of the note graph (rotate / zoom / focus a slice).
-- [ ] **Git versioning** — every edit (by you *or* an agent) is committed → full history.
-- [ ] **Web UI** — manage categories (+/–), write/save notes, search in the browser.
-- [ ] **Categories managed in the UI** — defined in-app, stored in the DB (no config file).
+- [ ] Inline render of `[[links]]` as clickable links in a read view.
+- [ ] Optional auth for exposing the web UI beyond localhost.
 
 ## Principles
 - **Local & private by default.** Your notes never leave your machine.

@@ -5,6 +5,7 @@
   python cli.py index [--full]     # (re)index your notes  (incremental by default)
   python cli.py search "query"     # quick hybrid search from the terminal
   python cli.py serve              # run the MCP server for your agents
+  python cli.py web [--port 8808]  # web UI: manage categories, write/link notes, search
   python cli.py selftest           # health checks
 """
 import os
@@ -45,6 +46,12 @@ def cmd_serve(_):
     server.mcp.run(transport="streamable-http")
 
 
+def cmd_web(args):
+    import uvicorn
+    print(f"HumanAgentWiki web UI: http://127.0.0.1:{args.port}", flush=True)
+    uvicorn.run("web:app", host="127.0.0.1", port=args.port)
+
+
 def cmd_selftest(_):
     import selftest
     sys.exit(selftest.run())
@@ -57,6 +64,7 @@ def main():
     pi = sub.add_parser("index"); pi.add_argument("--full", action="store_true"); pi.set_defaults(fn=cmd_index)
     ps = sub.add_parser("search"); ps.add_argument("query"); ps.add_argument("-k", type=int, default=8); ps.set_defaults(fn=cmd_search)
     sub.add_parser("serve").set_defaults(fn=cmd_serve)
+    pw = sub.add_parser("web"); pw.add_argument("--port", type=int, default=8808); pw.set_defaults(fn=cmd_web)
     sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
     args = p.parse_args()
     args.fn(args)

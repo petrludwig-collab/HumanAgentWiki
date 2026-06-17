@@ -53,6 +53,9 @@ NOTES_DIR=./sample_notes python cli.py search "how do small habits compound"
 
 # 7. …or run the MCP server for your agents
 python cli.py serve
+
+# 8. …or open the web UI (manage categories, write/link notes, search)
+python cli.py web      # then open http://127.0.0.1:8808
 ```
 
 Then point any MCP client at `http://127.0.0.1:8802/mcp`. For Claude Code:
@@ -63,11 +66,16 @@ claude mcp add --transport http humanagentwiki http://127.0.0.1:8802/mcp
 
 Tools exposed: `brain_search`, `brain_get`, `brain_neighbors`.
 
+## Web UI
+
+`python cli.py web` opens a small wiki-style interface (no build step, vanilla JS):
+- **Categories** — add/remove your top-level categories with +/–.
+- **Note editor** — pick a category, write, and link other notes with `[[...]]` (autocomplete). Saving writes a Markdown file, **commits it to git** (full history), and re-indexes it.
+- **Search** — semantic search across everything.
+
 ## On the roadmap
 
 - 🔮 **3D visualization** of the note graph (rotate / zoom / focus a slice).
-- 🕰️ **Git versioning** — every edit (by you *or* an agent) is committed, so you get full history.
-- 🖥️ **Web UI** — manage categories (+/–), write/save notes, and search in the browser.
 
 See [ROADMAP.md](ROADMAP.md).
 
