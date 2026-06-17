@@ -1,170 +1,315 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HumanAgentWiki</title>
-<style>
-  :root { --bg:#0f1115; --panel:#171a21; --line:#272b35; --fg:#e6e8ee; --mut:#8b93a7; --acc:#5b8cff; }
-  * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; }
-  body { font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); overflow:hidden; }
-  header { height:52px; padding:0 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:17px; margin:0; } header .sub { color:var(--mut); font-size:13px; flex:1; }
-  button.primary { background:var(--acc); color:#fff; border:none; border-radius:7px; padding:8px 14px; cursor:pointer; font:inherit; }
-  button.ghost { background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:7px 11px; cursor:pointer; color:var(--fg); font:inherit; }
-  #layout { display:flex; height:calc(100vh - 52px); position:relative; overflow:hidden; }
-  aside { width:260px; flex:none; border-right:1px solid var(--line); padding:14px; overflow:auto; }
-  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:14px 0 8px; }
-  h2:first-child { margin-top:0; }
-  .cat { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:7px; cursor:default; }
-  .cat:hover { background:var(--panel); } .cat .x { color:var(--mut); background:none; border:none; cursor:pointer; visibility:hidden; font-size:15px; }
-  .cat:hover .x { visibility:visible; }
-  .addrow { display:flex; gap:6px; margin-top:8px; }
-  input, textarea, select { background:#10131a; border:1px solid var(--line); border-radius:7px; padding:8px 10px; width:100%; color:var(--fg); font:inherit; }
-  textarea { min-height:240px; resize:vertical; font-family:ui-monospace,Menlo,monospace; }
-  #graph { flex:1; min-width:0; position:relative; overflow:hidden; background:var(--bg); }
-  .results .r { padding:7px 9px; border:1px solid var(--line); border-radius:7px; margin-bottom:6px; cursor:pointer; font-size:13px; }
-  .results .r:hover { border-color:var(--acc); } .results .r .t { font-weight:600; }
-  .pill { font-size:10px; color:var(--acc); border:1px solid #2a3a6b; border-radius:20px; padding:1px 7px; margin-left:4px; }
-  #editor { position:absolute; top:0; right:0; width:380px; height:100%; background:var(--panel); border-left:1px solid var(--line);
-            padding:16px; overflow:auto; transform:translateX(100%); transition:transform .2s ease; box-shadow:-12px 0 30px rgba(0,0,0,.35); }
-  #editor.open { transform:translateX(0); }
-  #editor .top { display:flex; align-items:center; justify-content:space-between; }
-  .field { margin:10px 0; } .field label { display:block; color:var(--mut); font-size:12px; margin-bottom:4px; }
-  #ac { position:absolute; background:#10131a; border:1px solid var(--line); border-radius:7px; max-height:160px; overflow:auto; display:none; z-index:9; }
-  #ac div { padding:6px 10px; cursor:pointer; } #ac div.sel, #ac div:hover { background:#1e2742; }
-  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1e2742; border:1px solid var(--acc); padding:8px 15px; border-radius:8px; opacity:0; transition:.2s; }
-  .toast.show { opacity:1; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HumanAgentWiki - 3D graph</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <style>
+    body { margin: 0; background: #0b0f1a; color: #e5e7eb; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; overflow: hidden; }
+    #graph { width: 100vw; height: 100vh; }
+    #panel { position: fixed; top: 12px; left: 12px; z-index: 10; width: 264px; background: rgba(15,23,42,.82); border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; font-size: 13px; backdrop-filter: blur(6px); }
+    #panel h1 { font-size: 14px; margin: 0 0 8px; display: flex; align-items: center; justify-content: space-between; }
+    #panel h1 .v2 { color: #60a5fa; font-weight: 700; }
+    #search { width: 100%; box-sizing: border-box; margin: 4px 0 6px; padding: 6px 9px; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 8px; color: #e5e7eb; font-size: 13px; }
+    #search::placeholder { color: #64748b; }
+    #results { max-height: 38vh; overflow-y: auto; margin-bottom: 6px; }
+    #results .res { padding: 5px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
+    #results .res:hover { background: #1e293b; }
+    #results .res.dim { color: #64748b; cursor: default; }
+    #results .restype { color: #64748b; }
+    .leg { display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; user-select: none; }
+    .leg:hover { opacity: .8; } .leg.off { opacity: .4; }
+    .leg .box { width: 13px; display: inline-block; text-align: center; }
+    .leg .x { margin-left: auto; color: #475569; font-size: 13px; visibility: hidden; }
+    .leg:hover .x { visibility: visible; } .leg .x:hover { color: #f87171; }
+    #legend .ctl { font-size: 11px; color: #64748b; margin: 6px 0 2px; }
+    #legend .ctl-link { cursor: pointer; } #legend .ctl-link:hover { color: #cbd5e1; text-decoration: underline; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .addcat { display: flex; gap: 5px; margin-top: 8px; }
+    .addcat input { flex: 1; min-width: 0; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 7px; color: #e5e7eb; padding: 5px 8px; font-size: 12px; }
+    .btn { background: #1e293b; color: #e5e7eb; border: 1px solid #334155; border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
+    .btn.blue { background: #2563eb; border-color: #2563eb; }
+    #newnote { width: 100%; margin-top: 8px; }
+    #stats { color: #94a3b8; margin-top: 8px; font-size: 12px; } #fps { color: #475569; }
+    #lblToggle { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer; user-select: none; }
+    #lblToggle input { accent-color: #60a5fa; cursor: pointer; }
+    #maplabels { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+    .map-label { position: absolute; transform: translate(-50%, -165%); white-space: nowrap; font-size: 11px; font-weight: 600; color: #f1f5f9; text-shadow: 0 1px 3px #000, 0 0 6px #000; pointer-events: none; }
+    #note { position: fixed; top: 0; right: 0; z-index: 20; width: 380px; max-width: 90vw; height: 100vh; background: rgba(15,23,42,.96); border-left: 1px solid #1e293b; padding: 18px 20px; overflow-y: auto; transform: translateX(100%); transition: transform .2s ease; backdrop-filter: blur(8px); box-sizing: border-box; }
+    #note.open { transform: translateX(0); }
+    #note .close { position: absolute; top: 12px; right: 16px; cursor: pointer; color: #94a3b8; font-size: 20px; border: none; background: none; }
+    #note .edit { position: absolute; top: 13px; right: 44px; cursor: pointer; color: #94a3b8; font-size: 16px; border: none; background: none; }
+    #note .edit:hover { color: #e5e7eb; }
+    #note h2 { font-size: 16px; margin: 4px 40px 4px 0; }
+    #note .meta { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+    #note .nbody { word-break: break-word; font-size: 13px; line-height: 1.55; color: #e2e8f0; }
+    #note .nbody h1,#note .nbody h2,#note .nbody h3 { color: #f1f5f9; line-height: 1.3; margin: 12px 0 4px; }
+    #note .nbody h1 { font-size: 17px; } #note .nbody h2 { font-size: 15px; } #note .nbody h3 { font-size: 14px; }
+    #note .nbody p { margin: 6px 0; } #note .nbody ul,#note .nbody ol { margin: 4px 0; padding-left: 20px; }
+    #note .nbody code { background: #1e293b; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    #note .nbody blockquote { border-left: 3px solid #334155; margin: 8px 0; padding-left: 10px; color: #cbd5e1; }
+    #note .nbody mark { background: #fde68a; color: #1e293b; padding: 0 2px; border-radius: 3px; }
+    #note a { color: #60a5fa; } #note .wl { color: #c084fc; cursor: pointer; text-decoration: underline; }
+    #note .field { margin: 8px 0; } #note .field label { display: block; color: #64748b; font-size: 11px; margin-bottom: 3px; }
+    #note input.f, #note select.f { width: 100%; box-sizing: border-box; background: #0b0f1a; color: #e5e7eb; border: 1px solid #1e293b; border-radius: 7px; padding: 7px 9px; font-size: 13px; }
+    #note textarea#edit-area { width: 100%; box-sizing: border-box; min-height: 46vh; background: #0b0f1a; color: #e2e8f0; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; font: 13px/1.55 ui-monospace, SFMono-Regular, monospace; resize: vertical; }
+    #note .edit-actions { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+    #note .edit-actions #edit-status { color: #94a3b8; font-size: 12px; }
+    #note-backlinks { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 12px; }
+    #note-backlinks h3 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+    #note-backlinks .bl { display: block; color: #c084fc; cursor: pointer; font-size: 13px; padding: 2px 0; }
+    #note-backlinks .bl:hover { text-decoration: underline; }
+    #ac { position: fixed; background: #0b0f1a; border: 1px solid #334155; border-radius: 7px; max-height: 160px; overflow: auto; display: none; z-index: 30; font-size: 13px; }
+    #ac div { padding: 6px 10px; cursor: pointer; } #ac div.sel,#ac div:hover { background: #1e293b; }
+  </style>
 </head>
 <body>
-<header>
-  <h1>🧠 HumanAgentWiki</h1>
-  <span class="sub">your second brain - humans &amp; agents share it</span>
-  <button class="primary" onclick="newNote()">+ New note</button>
-</header>
-
-<div id="layout">
-  <aside>
-    <h2>Categories</h2>
-    <div id="cats"></div>
-    <div class="addrow"><input id="newcat" placeholder="New category..."><button class="ghost" onclick="addCat()">+</button></div>
-    <h2>Search</h2>
-    <input id="q" placeholder="Search by meaning..." onkeydown="if(event.key==='Enter')doSearch()">
-    <div class="results" id="results" style="margin-top:8px"></div>
-  </aside>
-
+  <div id="panel">
+    <h1>🧠 HumanAgent<span class="v2">Wiki</span></h1>
+    <input id="search" type="text" placeholder="🔍 Search notes..." oninput="runSearch()" autocomplete="off" />
+    <div id="results"></div>
+    <div id="legend"></div>
+    <div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()" /><button class="btn" onclick="addCat()">+</button></div>
+    <button class="btn blue" id="newnote" onclick="newNote()">+ New note</button>
+    <label id="lblToggle"><input type="checkbox" id="showLabels" checked /> Show main labels</label>
+    <div id="stats">loading...</div>
+  </div>
+  <div id="maplabels"></div>
   <div id="graph"></div>
+  <div id="note">
+    <button class="close" onclick="closeNote()">×</button>
+    <button class="edit" id="note-edit" title="Edit" onclick="enterEdit()">✎</button>
+    <h2 id="note-title"></h2>
+    <div class="meta" id="note-meta"></div>
+    <div class="nbody" id="note-body"></div>
+    <div id="note-backlinks"></div>
+  </div>
+  <div id="ac"></div>
 
-  <section id="editor">
-    <div class="top"><h2 id="ed-title" style="margin:0">Note</h2><button class="ghost" onclick="closeEditor()">×</button></div>
-    <div class="field"><label>Category</label><select id="cat"></select></div>
-    <div class="field"><label>Title</label><input id="title" placeholder="Note title"></div>
-    <div class="field"><label>Text - type [[ to link other notes</label><textarea id="text" placeholder="Write here. Link with [[Another Note]]."></textarea></div>
-    <input type="hidden" id="file">
-    <button class="primary" onclick="save()">Save</button>
-  </section>
-</div>
-<div id="ac"></div>
-<div class="toast" id="toast"></div>
+  <script src="/static/3d-force-graph.min.js"></script>
+  <script src="/static/marked.min.js"></script>
+  <script>
+    const PALETTE = ["#60a5fa","#34d399","#c084fc","#f59e0b","#f472b6","#eab308","#22d3ee","#fb923c","#a78bfa","#4ade80","#f87171","#38bdf8","#facc15","#2dd4bf"];
+    const groupColor = {}; let categories = [];
+    function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
+    const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-<script src="/static/3d-force-graph.min.js"></script>
-<script>
-const $ = s => document.querySelector(s);
-let titles = [], Graph = null;
-async function api(p,o){ const r=await fetch(p,o); if(!r.ok) throw new Error(await r.text()); return r.json(); }
-function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+    let Graph, fullData = null, curNote = null;
+    const active = new Set(), nodeById = {}, nodeByTitle = {};
+    const adj = {}, inc = {};
+    let hlNodes = new Set(), hlLinks = new Set(), pinnedId = null, dragReheated = false, searchSet = new Set();
 
-// ---- categories ----
-async function loadCats(){
-  const cats = await api('/api/categories');
-  $('#cats').innerHTML = cats.map(c=>`<div class="cat"><span>${c}</span><button class="x" onclick="delCat('${c.replace(/'/g,"\\'")}')">×</button></div>`).join('')
-    || '<div style="color:var(--mut)">No categories yet - add one below</div>';
-  $('#cat').innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
-}
-async function addCat(){ const n=$('#newcat').value.trim(); if(!n)return;
-  await api('/api/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})});
-  $('#newcat').value=''; await loadCats(); toast('Category added'); }
-async function delCat(n){ if(!confirm('Remove category "'+n+'"? (notes are kept)'))return;
-  await api('/api/categories/'+encodeURIComponent(n),{method:'DELETE'}); await loadCats(); }
+    const LS_KEY = "haw-state-v1";
+    const loadState = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch(e){ return {}; } };
+    const saveState = p => { try { localStorage.setItem(LS_KEY, JSON.stringify(Object.assign(loadState(), p))); } catch(e){} };
 
-// ---- 3D graph ----
-function initGraph(){
-  Graph = ForceGraph3D()(document.getElementById('graph'))
-    .backgroundColor('#0f1115')
-    .nodeLabel('label')
-    .nodeAutoColorBy('category')
-    .nodeRelSize(5)
-    .linkColor(()=> 'rgba(120,130,150,0.35)')
-    .linkOpacity(0.5)
-    .onNodeClick(n=>{
-      const dist=120, r=Math.hypot(n.x,n.y,n.z)||1;
-      Graph.cameraPosition({x:n.x*(1+dist/r), y:n.y*(1+dist/r), z:n.z*(1+dist/r)}, n, 800);
-      if(String(n.id).startsWith('ext:')) newNote(n.label);
-      else openNote(n.id);
+    const RGBA = {};
+    function dim(hex, a){ let c = RGBA[hex]; if(!c){ const m = hex.replace("#",""); c = RGBA[hex] = { r:parseInt(m.slice(0,2),16), g:parseInt(m.slice(2,4),16), b:parseInt(m.slice(4,6),16) }; } return `rgba(${c.r},${c.g},${c.b},${a})`; }
+    function nodeColor(n){ if(hlNodes.size) return hlNodes.has(n.id)?baseColor(n):dim(baseColor(n),0.13); if(searchSet.size) return searchSet.has(n.id)?baseColor(n):dim(baseColor(n),0.10); return baseColor(n); }
+    const LINK_BASE="rgba(148,163,184,0.3)", LINK_FAINT="rgba(148,163,184,0.05)", LINK_HL="rgba(125,211,252,0.95)";
+    function linkColor(l){ if(hlLinks.size) return hlLinks.has(l)?LINK_HL:LINK_FAINT; if(searchSet.size) return LINK_FAINT; return LINK_BASE; }
+    function refreshStyles(){ if(!Graph) return; Graph.nodeColor(Graph.nodeColor()).linkColor(Graph.linkColor()).linkDirectionalParticles(Graph.linkDirectionalParticles()); }
+    function setHighlight(n){ hlNodes = new Set(); hlLinks = new Set(); if(n){ hlNodes.add(n.id); (adj[n.id]||[]).forEach(id=>hlNodes.add(id)); (inc[n.id]||[]).forEach(l=>hlLinks.add(l)); } refreshStyles(); }
+
+    function buildLegend(groups){
+      const el = document.getElementById("legend");
+      el.innerHTML = groups.map(g => {
+        const on = active.has(g);
+        const known = categories.includes(g);
+        return `<div class="leg${on?"":" off"}" data-g="${g}"><span class="box">${on?"☑":"☐"}</span><span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span>${g}${known?`<span class="x" title="Remove category" data-del="${g}">×</span>`:""}</div>`;
+      }).join("") + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span></div>`;
+      el.querySelectorAll(".leg").forEach(d => d.onclick = e => {
+        if(e.target.dataset.del){ delCat(e.target.dataset.del); return; }
+        const g = d.dataset.g; active.has(g)?active.delete(g):active.add(g); buildLegend(groups); applyFilter(); saveState({active:[...active]});
+      });
+      document.getElementById("leg-all").onclick = () => { groups.forEach(g=>active.add(g)); buildLegend(groups); applyFilter(); saveState({active:[...active]}); };
+      document.getElementById("leg-none").onclick = () => { active.clear(); buildLegend(groups); applyFilter(); saveState({active:[...active]}); };
+    }
+    function applyFilter(){
+      if(!fullData||!Graph) return;
+      const nodes = fullData.nodes.filter(n=>active.has(n.group));
+      const ids = new Set(nodes.map(n=>n.id));
+      const links = fullData.links.filter(l => { const s=(l.source&&l.source.id)||l.source, t=(l.target&&l.target.id)||l.target; return ids.has(s)&&ids.has(t); });
+      Graph.graphData({nodes, links});
+      document.getElementById("stats").innerHTML = `${nodes.length} nodes · ${links.length} links <span id="fps"></span>`;
+    }
+
+    function focusNode(n){ if(!n||n.x==null) return; const dist=120, r=1+dist/Math.hypot(n.x,n.y,n.z||1); Graph.cameraPosition({x:n.x*r,y:n.y*r,z:(n.z||1)*r}, n, 800); }
+    function esc(s){ return (s||"").replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+    function renderBody(text){
+      let h = (window.marked ? marked.parse(text||"", {gfm:true, breaks:true}) : esc(text||""));
+      h = h.replace(/==([^=]+)==/g, "<mark>$1</mark>");
+      h = h.replace(/\[\[([^\]]+)\]\]/g, (m,t)=>{ const disp=t.split("|")[0].trim(); return `<span class="wl" onclick="openByTitle('${disp.replace(/'/g,"\\'")}')">${esc(disp)}</span>`; });
+      return h;
+    }
+    function closeNote(){ document.getElementById("note").classList.remove("open"); pinnedId=null; setHighlight(null); document.getElementById("ac").style.display="none"; }
+
+    function catOptions(sel){ return categories.map(c=>`<option${c===sel?" selected":""}>${esc(c)}</option>`).join(""); }
+    function newNote(title){
+      curNote = {id:null, title:title||"", category:categories[0]||"", body:"", backlinks:[]};
+      document.getElementById("note-edit").style.display = "none";
+      document.getElementById("note-title").textContent = "New note";
+      document.getElementById("note-meta").textContent = "";
+      document.getElementById("note-backlinks").innerHTML = "";
+      document.getElementById("note").classList.add("open");
+      enterEdit();
+    }
+    async function openByTitle(t){ const n = nodeByTitle[t]; if(n) openNote(n.id); else newNote(t); }
+    async function openNote(id, focus=true){
+      try {
+        if(String(id).startsWith("ext:")){ newNote(String(id).slice(4)); return; }
+        const n = await fetch("/api/note?file="+encodeURIComponent(id)).then(r=>r.json());
+        if(!n || n.error) return;
+        curNote = n;
+        document.getElementById("note-edit").style.display = "";
+        document.getElementById("note-title").textContent = n.title;
+        document.getElementById("note-meta").textContent = (n.category||"") + " · " + n.id;
+        document.getElementById("note-body").innerHTML = renderBody(n.body);
+        const bl = n.backlinks || [];
+        document.getElementById("note-backlinks").innerHTML = bl.length
+          ? "<h3>↩ Linked from ("+bl.length+")</h3>" + bl.map(b=>`<span class="bl" onclick="openNote('${b.id.replace(/'/g,"\\'")}')">${esc(b.label)}</span>`).join("")
+          : "";
+        document.getElementById("note").classList.add("open");
+        if(nodeById[id]){ if(focus) focusNode(nodeById[id]); pinnedId=id; setHighlight(nodeById[id]); }
+      } catch(e){}
+    }
+    function enterEdit(){
+      if(!curNote) return;
+      document.getElementById("note-backlinks").style.display = "none";
+      const nb = document.getElementById("note-body");
+      nb.innerHTML =
+        '<div class="field"><label>Title</label><input class="f" id="edit-title"></div>'
+      + '<div class="field"><label>Category</label><select class="f" id="edit-cat">'+catOptions(curNote.category)+'</select></div>'
+      + '<div class="field"><label>Text - type [[ to link other notes</label><textarea id="edit-area" spellcheck="false"></textarea></div>'
+      + '<div class="edit-actions"><button class="btn blue" id="edit-save">💾 Save</button><button class="btn" id="edit-cancel">Cancel</button><span id="edit-status"></span></div>';
+      document.getElementById("edit-title").value = curNote.title || "";
+      document.getElementById("edit-area").value = curNote.body || "";
+      document.getElementById("note-title").textContent = curNote.id ? "Edit note" : "New note";
+      const ta = document.getElementById("edit-area"); wireAutocomplete(ta); ta.focus();
+      document.getElementById("edit-cancel").onclick = () => curNote.id ? openNote(curNote.id, false) : closeNote();
+      document.getElementById("edit-save").onclick = saveEdit;
+      ta.onkeydown = e => { if((e.metaKey||e.ctrlKey)&&e.key==="Enter") saveEdit(); };
+    }
+    async function saveEdit(){
+      const st = document.getElementById("edit-status");
+      const title = document.getElementById("edit-title").value.trim();
+      if(!title){ st.textContent = "title required"; return; }
+      st.textContent = "saving...";
+      try {
+        const r = await fetch("/api/note", { method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ category: document.getElementById("edit-cat").value, title,
+            text: document.getElementById("edit-area").value, file: curNote.id || null }) }).then(r=>r.json());
+        if(r.ok){ document.getElementById("note-backlinks").style.display=""; await reloadGraph(); await openNote(r.file, false); }
+        else st.textContent = "error: " + (r.detail||"not saved");
+      } catch(e){ st.textContent = "error: " + e.message; }
+    }
+
+    // categories
+    async function loadCats(){ categories = await fetch("/api/categories").then(r=>r.json()); }
+    async function addCat(){ const n = document.getElementById("newcat").value.trim(); if(!n) return;
+      await fetch("/api/categories",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n})});
+      document.getElementById("newcat").value=""; await loadCats(); active.add(n); assignColors([...new Set([...legendGroups(),n])]); buildLegend(legendGroups()); applyFilter(); }
+    async function delCat(n){ if(!confirm('Remove category "'+n+'"? (notes are kept)')) return;
+      await fetch("/api/categories/"+encodeURIComponent(n),{method:"DELETE"}); await loadCats(); buildLegend(legendGroups()); }
+    function legendGroups(){ const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group)); return [...gs].sort(); }
+
+    // search (client-side over node labels)
+    function runSearch(){
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const box = document.getElementById("results");
+      searchSet = new Set();
+      if(q.length>=2) for(const n of Object.values(nodeById)) if((n.label||"").toLowerCase().includes(q)) searchSet.add(n.id);
+      refreshStyles();
+      if(!q){ box.innerHTML=""; return; }
+      const hits = Object.values(nodeById).filter(n=>(n.label||"").toLowerCase().includes(q)).sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
+      box.innerHTML = hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)} <span class="restype">· ${esc(n.group||"")}</span></div>`).join("") || '<div class="res dim">no results</div>';
+    }
+
+    // [[ autocomplete in the editor textarea
+    let acItems = [], acSel = 0, acTA = null;
+    function wireAutocomplete(ta){ acTA = ta; }
+    document.addEventListener("input", e => {
+      if(e.target.id!=="edit-area") return;
+      const ta = e.target, pos = ta.selectionStart, m = ta.value.slice(0,pos).match(/\[\[([^\]]*)$/), ac = document.getElementById("ac");
+      if(!m){ ac.style.display="none"; return; }
+      acItems = Object.values(nodeByTitle).map(n=>n.label).filter(x=>x.toLowerCase().includes(m[1].toLowerCase())).slice(0,8);
+      if(!acItems.length){ ac.style.display="none"; return; }
+      acSel = 0; ac.innerHTML = acItems.map((x,i)=>`<div class="${i===0?'sel':''}" onclick="acPick(${i})">${esc(x)}</div>`).join("");
+      const r = ta.getBoundingClientRect(); ac.style.left=r.left+"px"; ac.style.top=(r.top+24)+"px"; ac.style.width=Math.min(r.width,300)+"px"; ac.style.display="block";
     });
-  resizeGraph();
-}
-function resizeGraph(){ const el=$('#graph'); if(Graph){ Graph.width(el.clientWidth); Graph.height(el.clientHeight); } }
-window.addEventListener('resize', resizeGraph);
+    document.addEventListener("keydown", e => {
+      const ac = document.getElementById("ac"); if(e.target.id!=="edit-area"||ac.style.display!=="block") return;
+      if(e.key==="ArrowDown"){e.preventDefault();acSel=(acSel+1)%acItems.length;}
+      else if(e.key==="ArrowUp"){e.preventDefault();acSel=(acSel-1+acItems.length)%acItems.length;}
+      else if(e.key==="Enter"||e.key==="Tab"){e.preventDefault();acPick(acSel);return;}
+      else if(e.key==="Escape"){ac.style.display="none";return;} else return;
+      [...ac.children].forEach((d,i)=>d.className=i===acSel?"sel":"");
+    });
+    function acPick(i){ const ta=acTA, pos=ta.selectionStart; ta.value = ta.value.slice(0,pos).replace(/\[\[([^\]]*)$/,"[["+acItems[i]+"]]")+ta.value.slice(pos); document.getElementById("ac").style.display="none"; ta.focus(); }
 
-// ---- editor ----
-function openEditorPanel(){ $('#editor').classList.add('open'); setTimeout(resizeGraph,220); }
-function closeEditor(){ $('#editor').classList.remove('open'); $('#ac').style.display='none'; setTimeout(resizeGraph,220); }
-function newNote(title){ $('#ed-title').textContent='New note'; $('#title').value=title||''; $('#text').value=''; $('#file').value=''; openEditorPanel(); $('#title').focus(); }
-async function openNote(file){
-  const n = await api('/api/note?file='+encodeURIComponent(file));
-  const m = n.content.match(/^title:\s*(.*)$/m), c = n.content.match(/^category:\s*(.*)$/m);
-  $('#ed-title').textContent='Edit note';
-  $('#title').value = m?m[1].trim():'';
-  $('#text').value = n.content.replace(/^---[\s\S]*?---\s*/,'').trim();
-  if(c) $('#cat').value = c[1].trim();
-  $('#file').value = file; openEditorPanel();
-}
-async function save(){
-  const title=$('#title').value.trim(); if(!title){toast('Title required');return;}
-  await api('/api/note',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({category:$('#cat').value,title,text:$('#text').value,file:$('#file').value||null})});
-  toast('Saved - committed + indexed'); closeEditor();
-  titles = await api('/api/titles'); await loadGraphData();
-}
-async function loadGraphData(){ Graph.graphData(await api('/api/graph')); }
+    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); buildLegend(legendGroups()); }
+    function ingest(data){
+      fullData = data;
+      for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k];
+      data.nodes.forEach(n=>{ nodeById[n.id]=n; nodeByTitle[n.label]=n; });
+      for(const k in adj) delete adj[k]; for(const k in inc) delete inc[k];
+      data.links.forEach(l=>{ const s=(l.source&&l.source.id)||l.source, t=(l.target&&l.target.id)||l.target;
+        (adj[s]=adj[s]||new Set()).add(t); (adj[t]=adj[t]||new Set()).add(s); (inc[s]=inc[s]||[]).push(l); (inc[t]=inc[t]||[]).push(l); });
+      assignColors(legendGroups());
+    }
 
-// ---- search ----
-async function doSearch(){
-  const q=$('#q').value.trim(); if(!q)return;
-  const res = await api('/api/search?q='+encodeURIComponent(q));
-  $('#results').innerHTML = res.map(r=>`<div class="r" onclick="openNote('${r.file.replace(/'/g,"\\'")}')"><span class="t">${r.title}</span><span class="pill">${r.category||''}</span></div>`).join('')
-    || '<div style="color:var(--mut)">No results</div>';
-}
+    (async () => {
+      await loadCats();
+      const data = await fetch("/api/graph").then(r=>r.json());
+      ingest(data);
+      const groups = legendGroups();
+      const saved = loadState();
+      if(Array.isArray(saved.active)) saved.active.filter(g=>groups.includes(g)).forEach(g=>active.add(g)); else groups.forEach(g=>active.add(g));
+      buildLegend(groups);
 
-// ---- [[ autocomplete ----
-const ta=()=>$('#text'), ac=()=>$('#ac'); let acSel=0, acItems=[];
-document.addEventListener('input', e=>{
-  if(e.target.id!=='text') return;
-  const t=ta(), pos=t.selectionStart, m=t.value.slice(0,pos).match(/\[\[([^\]]*)$/);
-  if(!m){ ac().style.display='none'; return; }
-  acItems = titles.filter(x=>x.toLowerCase().includes(m[1].toLowerCase())).slice(0,8);
-  if(!acItems.length){ ac().style.display='none'; return; }
-  acSel=0; ac().innerHTML=acItems.map((x,i)=>`<div class="${i===0?'sel':''}" onclick="pick(${i})">${x}</div>`).join('');
-  const r=t.getBoundingClientRect(); ac().style.left=r.left+'px'; ac().style.top=(r.top+30)+'px'; ac().style.width=r.width+'px'; ac().style.display='block';
-});
-document.addEventListener('keydown', e=>{
-  if(e.target.id!=='text' || ac().style.display!=='block') return;
-  if(e.key==='ArrowDown'){e.preventDefault();acSel=(acSel+1)%acItems.length;}
-  else if(e.key==='ArrowUp'){e.preventDefault();acSel=(acSel-1+acItems.length)%acItems.length;}
-  else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();pick(acSel);return;}
-  else if(e.key==='Escape'){ac().style.display='none';return;}
-  else return;
-  [...ac().children].forEach((d,i)=>d.className=i===acSel?'sel':'');
-});
-function pick(i){ const t=ta(), pos=t.selectionStart;
-  t.value = t.value.slice(0,pos).replace(/\[\[([^\]]*)$/,'[['+acItems[i]+']]') + t.value.slice(pos);
-  ac().style.display='none'; t.focus();
-}
+      Graph = ForceGraph3D()(document.getElementById("graph"))
+        .graphData(data)
+        .warmupTicks(120).d3AlphaDecay(0.03).d3AlphaMin(0.001)
+        .backgroundColor("#0b0f1a")
+        .nodeLabel(n => n.label)
+        .nodeColor(nodeColor).nodeVal(n=>n.val).nodeOpacity(0.95)
+        .linkColor(linkColor).linkWidth(0)
+        .linkDirectionalParticles(l=>hlLinks.has(l)?3:0).linkDirectionalParticleWidth(1.8)
+        .onNodeHover(n=>{ document.getElementById("graph").style.cursor = n?"pointer":""; })
+        .onNodeClick(n=>{ openNote(n.id, false); })
+        .onBackgroundClick(()=>{ pinnedId=null; setHighlight(null); })
+        .onNodeDrag(()=>{ if(!dragReheated){ dragReheated=true; Graph.d3ReheatSimulation(); } })
+        .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; });
+      Graph.d3Force("charge").strength(-60);
+      applyFilter();
 
-(async()=>{ await loadCats(); titles = await api('/api/titles'); initGraph(); await loadGraphData(); })();
-</script>
+      // map labels for big nodes (hubs)
+      const labelLayer = document.getElementById("maplabels");
+      const mapLabels = data.nodes.filter(n=>n.val>=16).map(n=>{ const el=document.createElement("div"); el.className="map-label"; el.textContent=(n.label||"").slice(0,28); el.style.display="none"; labelLayer.appendChild(el); return {n,el}; });
+      let labelsOn = (saved.labels!==false), frames=0, lastFps=performance.now();
+      function updateLabels(){
+        if(!labelsOn) return; frames++;
+        const now=performance.now(); if(now-lastFps>1000){ const el=document.getElementById("fps"); if(el) el.textContent=" · "+Math.round(frames*1000/(now-lastFps))+" fps"; frames=0; lastFps=now; }
+        const cam=Graph.camera(), V3=cam.position.constructor, fwd=cam.getWorldDirection(new V3());
+        for(const {n,el} of mapLabels){
+          if(!active.has(n.group)||n.x==null){ el.style.display="none"; continue; }
+          const dx=n.x-cam.position.x, dy=n.y-cam.position.y, dz=(n.z||0)-cam.position.z;
+          if(dx*fwd.x+dy*fwd.y+dz*fwd.z<=0){ el.style.display="none"; continue; }
+          const dist=Math.hypot(dx,dy,dz); if(dist>3000){ el.style.display="none"; continue; }
+          const c=Graph.graph2ScreenCoords(n.x,n.y,n.z||0);
+          el.style.display=""; el.style.fontSize=Math.max(9,Math.min(13,15-dist/400))+"px"; el.style.left=c.x+"px"; el.style.top=c.y+"px";
+        }
+        requestAnimationFrame(updateLabels);
+      }
+      const cb=document.getElementById("showLabels");
+      cb.checked=labelsOn; cb.addEventListener("change", e=>{ labelsOn=e.target.checked; saveState({labels:labelsOn}); if(labelsOn) updateLabels(); else mapLabels.forEach(({el})=>el.style.display="none"); });
+      if(labelsOn) updateLabels();
+
+      // camera persistence
+      if(saved.cam) setTimeout(()=>{ try{ Graph.cameraPosition({x:saved.cam.x,y:saved.cam.y,z:saved.cam.z},{x:saved.cam.tx,y:saved.cam.ty,z:saved.cam.tz},0);}catch(e){} }, 80);
+      setInterval(()=>{ if(!Graph) return; const p=Graph.cameraPosition(); const c=Graph.controls&&Graph.controls(); const t=(c&&c.target)||{x:0,y:0,z:0}; saveState({cam:{x:p.x,y:p.y,z:p.z,tx:t.x,ty:t.y,tz:t.z}}); }, 1500);
+    })().catch(e => { document.getElementById("stats").textContent = "error: " + e.message; });
+  </script>
 </body>
 </html>

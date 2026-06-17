@@ -128,7 +128,18 @@ def get_note(file: str):
     if not os.path.isfile(path):
         raise HTTPException(404, "not found")
     with open(path, encoding="utf-8") as f:
-        return {"file": file, "content": f.read()}
+        raw = f.read()
+    fm, body = index.parse_frontmatter(raw)
+    title = fm.get("title", os.path.splitext(os.path.basename(file))[0])
+    category = fm.get("category", index.category_of(file))
+    conn = connect()
+    cur = conn.cursor(row_factory=dict_row)
+    cur.execute("SELECT DISTINCT file, title FROM chunks WHERE %s = ANY(links) AND file <> %s",
+                (title, file))
+    backlinks = [{"id": r["file"], "label": r["title"]} for r in cur.fetchall()]
+    conn.close()
+    return {"id": file, "title": title, "category": category, "body": body.strip(),
+            "backlinks": backlinks}
 
 
 class NoteIn(BaseModel):
@@ -168,22 +179,22 @@ def graph():
     """Nodes (one per note file) and links (from [[wikilinks]]) for the 3D view."""
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
-    cur.execute("SELECT DISTINCT ON (file) file, title, category FROM chunks ORDER BY file, id")
+    cur.execute("SELECT DISTINCT ON (file) file, title, category, node_type FROM chunks ORDER BY file, id")
     base = cur.fetchall()
     cur.execute("SELECT file, array_agg(DISTINCT l) AS links "
                 "FROM chunks CROSS JOIN LATERAL unnest(links) AS l GROUP BY file")
     links_by_file = {r["file"]: r["links"] for r in cur.fetchall()}
     conn.close()
     title_to_file = {r["title"]: r["file"] for r in base}
-    nodes = {r["file"]: {"id": r["file"], "label": r["title"], "category": r["category"]}
-             for r in base}
+    nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
+                         "val": 16 if r["node_type"] == "hub" else 4} for r in base}
     links = []
     for src, targets in links_by_file.items():
         for t in targets:
             dst = title_to_file.get(t)
             if dst is None:                       # link to a note that doesn't exist yet
                 dst = "ext:" + t
-                nodes.setdefault(dst, {"id": dst, "label": t, "category": "(unresolved)"})
+                nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 2})
             links.append({"source": src, "target": dst})
     return {"nodes": list(nodes.values()), "links": links}
 
