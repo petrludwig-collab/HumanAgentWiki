@@ -184,8 +184,11 @@ def get_note(file: str):
     crow = cur.fetchone()
     category = crow["category"] if crow else index.category_label(
         fm.get("category") or fm.get("project") or index.category_of(file))
+    # Backlinks: brains link by slug (filename) as well as by title, so match the
+    # incoming [[wikilinks]] against both forms of this note.
+    slug = os.path.splitext(os.path.basename(file))[0]
     cur.execute("SELECT DISTINCT ON (file) file, title FROM chunks "
-                "WHERE %s = ANY(links) AND file <> %s ORDER BY file, id", (title, file))
+                "WHERE links && %s AND file <> %s ORDER BY file, id", ([title, slug], file))
     backlinks = [{"id": r["file"], "label": r["title"]} for r in cur.fetchall()]
     conn.close()
     return {"id": file, "title": title, "category": category, "body": body.strip(),
