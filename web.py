@@ -193,10 +193,10 @@ def graph():
     # brains link by slug (filename), not by title - so resolve [[X]] against both.
     slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
-                         "val": 16 if r["node_type"] == "hub" else 2} for r in base}
-    # categories are nodes too: one UPPER-CASE hub per category; every note links to it.
+                         "val": 54 if r["node_type"] == "hub" else 2} for r in base}
+    # categories are nodes too: one hub per category; every note links to it.
     for c in sorted({r["category"] for r in base}):
-        nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 40, "is_cat": True}
+        nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 54, "is_cat": True}
     links = [{"source": r["file"], "target": "cat:" + r["category"]} for r in base]
     for src, targets in links_by_file.items():
         for t in targets:
@@ -205,15 +205,18 @@ def graph():
                 dst = "ext:" + t
                 nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 2})
             links.append({"source": src, "target": dst})
-    # size nodes by connectivity; category hubs and explicit hubs stay large.
+    # three discrete sizes like the brain: hub/category = 54, well-connected = 16, leaf = 2.
     degree = {}
     for l in links:
+        if str(l["target"]).startswith("cat:"):
+            continue                              # the category anchor shouldn't inflate sizes
         degree[l["source"]] = degree.get(l["source"], 0) + 1
         degree[l["target"]] = degree.get(l["target"], 0) + 1
     for nid, node in nodes.items():
-        if node.get("is_cat") or node["val"] == 16:
+        if node.get("is_cat") or node["val"] == 54:   # category hubs / explicit hubs stay big
             continue
-        node["val"] = min(2 + degree.get(nid, 0) * 2, 30)
+        d = degree.get(nid, 0)
+        node["val"] = 54 if d >= 10 else 16 if d >= 4 else 2
     return {"nodes": list(nodes.values()), "links": links}
 
 
