@@ -18,10 +18,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def cmd_init_db(_):
     import psycopg
     from common import DSN
-    sql = open(os.path.join(HERE, "schema.sql"), encoding="utf-8").read()
+    with open(os.path.join(HERE, "schema.sql"), encoding="utf-8") as f:
+        sql = f.read()
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(sql)
-    print("Database initialized — schema.sql applied.")
+    print("Database initialized - schema.sql applied.")
 
 
 def cmd_index(args):
@@ -40,16 +41,15 @@ def cmd_search(args):
 
 def cmd_serve(_):
     import server
-    server.embed("warmup")
-    print(f"HumanAgentWiki MCP server: {server.MCP_HOST}:{server.MCP_PORT} (streamable-http, /mcp)",
-          flush=True)
-    server.mcp.run(transport="streamable-http")
+    server.serve()
 
 
 def cmd_web(args):
     import uvicorn
-    print(f"HumanAgentWiki web UI: http://127.0.0.1:{args.port}", flush=True)
-    uvicorn.run("web:app", host="127.0.0.1", port=args.port)
+    from common import WEB_HOST, WEB_PORT
+    port = args.port or WEB_PORT
+    print(f"HumanAgentWiki web UI: http://{WEB_HOST}:{port}", flush=True)
+    uvicorn.run("web:app", host=WEB_HOST, port=port)
 
 
 def cmd_selftest(_):
@@ -64,7 +64,7 @@ def main():
     pi = sub.add_parser("index"); pi.add_argument("--full", action="store_true"); pi.set_defaults(fn=cmd_index)
     ps = sub.add_parser("search"); ps.add_argument("query"); ps.add_argument("-k", type=int, default=8); ps.set_defaults(fn=cmd_search)
     sub.add_parser("serve").set_defaults(fn=cmd_serve)
-    pw = sub.add_parser("web"); pw.add_argument("--port", type=int, default=8808); pw.set_defaults(fn=cmd_web)
+    pw = sub.add_parser("web"); pw.add_argument("--port", type=int, default=None); pw.set_defaults(fn=cmd_web)
     sub.add_parser("selftest").set_defaults(fn=cmd_selftest)
     args = p.parse_args()
     args.fn(args)

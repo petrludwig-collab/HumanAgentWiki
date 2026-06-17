@@ -64,7 +64,8 @@ def category_of(rel):
 
 def process_file(path):
     rel = os.path.relpath(path, NOTES_DIR)
-    raw = open(path, encoding='utf-8').read()
+    with open(path, encoding='utf-8') as f:
+        raw = f.read()
     fm, body = parse_frontmatter(raw)
     f_title  = fm.get('title', os.path.splitext(os.path.basename(rel))[0])
     category = fm.get('category', category_of(rel))
@@ -76,7 +77,7 @@ def process_file(path):
             continue
         title = header.strip() if header else f_title
         links = LINK_RE.findall(full)
-        emb_text = f"{f_title} — {title}\n{content}".strip() if title != f_title else full
+        emb_text = f"{f_title} - {title}\n{content}".strip() if title != f_title else full
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
                         links=links, text=full, meta=json.dumps(fm, ensure_ascii=False),
                         emb_text=emb_text))

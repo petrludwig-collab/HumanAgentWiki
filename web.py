@@ -11,6 +11,7 @@ Notes are saved as Markdown files under NOTES_DIR; every save is a git commit
 import os
 import re
 import subprocess
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
@@ -22,11 +23,21 @@ import server
 from common import connect, NOTES_DIR
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-app = FastAPI(title="HumanAgentWiki")
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    ensure_setup()
+    yield
+
+
+app = FastAPI(title="HumanAgentWiki", lifespan=lifespan)
 
 
 # ---------- helpers ----------
 def _git(*args):
+    # Best-effort versioning: a failing commit (e.g. "nothing to commit") must not
+    # break a save. If git is missing, notes are still written — just unversioned.
     subprocess.run(["git", "-C", NOTES_DIR, *args], capture_output=True)
 
 
@@ -45,9 +56,15 @@ def slugify(t):
     return re.sub(r"[\s_]+", "-", s) or "note"
 
 
-@app.on_event("startup")
-def _startup():
-    ensure_setup()
+def safe_md_path(rel):
+    """Resolve a client-supplied path to an absolute .md path strictly inside
+    NOTES_DIR. Rejects absolute paths, non-.md files, and `..` escapes."""
+    if os.path.isabs(rel) or not rel.endswith(".md"):
+        raise HTTPException(400, "path must be a relative .md file")
+    path = os.path.normpath(os.path.join(NOTES_DIR, rel))
+    if os.path.commonpath([NOTES_DIR, path]) != NOTES_DIR:
+        raise HTTPException(400, "path escapes the notes directory")
+    return path
 
 
 # ---------- categories ----------
@@ -103,10 +120,11 @@ def titles():
 
 @app.get("/api/note")
 def get_note(file: str):
-    path = os.path.normpath(os.path.join(NOTES_DIR, file))
-    if not path.startswith(NOTES_DIR) or not os.path.isfile(path):
+    path = safe_md_path(file)
+    if not os.path.isfile(path):
         raise HTTPException(404, "not found")
-    return {"file": file, "content": open(path, encoding="utf-8").read()}
+    with open(path, encoding="utf-8") as f:
+        return {"file": file, "content": f.read()}
 
 
 class NoteIn(BaseModel):
@@ -123,12 +141,10 @@ def save_note(n: NoteIn):
     if not title:
         raise HTTPException(400, "title required")
     rel = n.file or os.path.join(cat, slugify(title) + ".md")
-    path = os.path.normpath(os.path.join(NOTES_DIR, rel))
-    if not path.startswith(NOTES_DIR):
-        raise HTTPException(400, "bad path")
+    path = safe_md_path(rel)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    open(path, "w", encoding="utf-8").write(
-        f"---\ntitle: {title}\ncategory: {cat}\n---\n\n{n.text.strip()}\n")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"---\ntitle: {title}\ncategory: {cat}\n---\n\n{n.text.strip()}\n")
     # git versioning: every save is a commit
     _git("add", "-A")
     _git("commit", "-m", f"{'edit' if n.file else 'add'}: {title}")

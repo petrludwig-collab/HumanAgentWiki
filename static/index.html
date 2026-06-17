@@ -108,11 +108,15 @@ async function doSearch(){
 }
 async function openNote(file){
   const n = await api('/api/note?file='+encodeURIComponent(file));
-  const m = n.content.match(/title:\s*(.*)/), c = n.content.match(/category:\s*(.*)/);
-  const body = n.content.replace(/^---[\s\S]*?---\s*/,'');
-  $('#title').value = m?m[1].trim():''; $('#text').value = body.trim();
-  if(c) $('#cat').value = c[1].trim(); $('#file').value = file;
-  toast('Loaded — edit & save'); window.scrollTo(0,document.body.scrollHeight);
+  const m = n.content.match(/^title:\s*(.*)$/m);
+  const c = n.content.match(/^category:\s*(.*)$/m);
+  const body = n.content.replace(/^---[\s\S]*?---\s*/, '');
+  $('#title').value = m ? m[1].trim() : '';
+  $('#text').value = body.trim();
+  if(c) $('#cat').value = c[1].trim();
+  $('#file').value = file;
+  toast('Loaded - edit & save');
+  window.scrollTo(0, document.body.scrollHeight);
 }
 function clearEditor(){ $('#title').value=''; $('#text').value=''; $('#file').value=''; }
 async function save(){

@@ -87,7 +87,11 @@ def brain_neighbors(name: str, k: int = 15) -> dict:
     return dict(links_to=outgoing, linked_from=incoming)
 
 
-if __name__ == "__main__":
-    embed("warmup")  # load the model into memory at startup
+def serve():
+    embed("warmup")  # load the model into memory before accepting requests
     print(f"HumanAgentWiki MCP server: {MCP_HOST}:{MCP_PORT} (streamable-http, /mcp)", flush=True)
     mcp.run(transport="streamable-http")
+
+
+if __name__ == "__main__":
+    serve()
