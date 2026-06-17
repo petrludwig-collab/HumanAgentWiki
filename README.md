@@ -31,7 +31,45 @@ You define your top-level **categories right in the app** (add/remove with +/–
 
 ## Quick start
 
-> ⚙️ Coming together — see [ROADMAP.md](ROADMAP.md). Planned: `docker compose up` (Postgres + pgvector) → `init-db` → point it at your notes folder → run the MCP server → connect your agent.
+```bash
+# 1. Start PostgreSQL + pgvector
+docker compose up -d
+
+# 2. Install dependencies (a virtualenv is recommended)
+pip install -r requirements.txt
+
+# 3. Configure (copy and edit if needed)
+cp .env.example .env && set -a && . ./.env && set +a
+
+# 4. Create the schema
+python cli.py init-db
+
+# 5. Index your notes  (put Markdown in ./notes — folders are categories;
+#    or try the bundled demo:)
+NOTES_DIR=./sample_notes python cli.py index
+
+# 6. Search from the terminal…
+NOTES_DIR=./sample_notes python cli.py search "how do small habits compound"
+
+# 7. …or run the MCP server for your agents
+python cli.py serve
+```
+
+Then point any MCP client at `http://127.0.0.1:8802/mcp`. For Claude Code:
+
+```bash
+claude mcp add --transport http humanagentwiki http://127.0.0.1:8802/mcp
+```
+
+Tools exposed: `brain_search`, `brain_get`, `brain_neighbors`.
+
+## On the roadmap
+
+- 🔮 **3D visualization** of the note graph (rotate / zoom / focus a slice).
+- 🕰️ **Git versioning** — every edit (by you *or* an agent) is committed, so you get full history.
+- 🖥️ **Web UI** — manage categories (+/–), write/save notes, and search in the browser.
+
+See [ROADMAP.md](ROADMAP.md).
 
 ## License
 
