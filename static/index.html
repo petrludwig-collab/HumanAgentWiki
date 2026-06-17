@@ -48,6 +48,8 @@
     #note .edit:hover { color: #e5e7eb; }
     #note h2 { font-size: 16px; margin: 4px 40px 4px 0; }
     #note .meta { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+    #note .meta .metacat { color: #c084fc; cursor: pointer; }
+    #note .meta .metacat:hover { text-decoration: underline; }
     #note-tags { margin: 4px 0 2px; }
     #note-tags .tag { display: inline-block; font-size: 11px; color: #cbd5e1; background: #1e293b; border-radius: 6px; padding: 1px 7px; margin: 2px 4px 2px 0; cursor: pointer; }
     #note-tags .tag:hover { background: #334155; }
@@ -197,10 +199,9 @@
         curNote = n;
         document.getElementById("note-edit").style.display = "";
         document.getElementById("note-title").textContent = n.title;
+        document.getElementById("note-tags").innerHTML = (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
         const _c = n.category || "";
-        const _catChip = _c ? `<span class="catchip" onclick="openCategory('${_c.replace(/'/g,"\\'")}')"><span class="dot" style="background:${groupColor[_c]||'#94a3b8'}"></span>${esc(_c)}</span>` : "";
-        document.getElementById("note-tags").innerHTML = _catChip + (n.tags||[]).map(t=>`<span class="tag" onclick="openTag('${String(t).replace(/'/g,"\\'")}')">${esc(t)}</span>`).join("");
-        document.getElementById("note-meta").textContent = (n.category||"") + " · " + n.id;
+        document.getElementById("note-meta").innerHTML = (_c ? `<span class="metacat" onclick="openCategory('${_c.replace(/'/g,"\\'")}')">${esc(_c)}</span> - ` : "") + esc(n.id);
         document.getElementById("note-body").innerHTML = renderBody(n.body);
         const bl = n.backlinks || [];
         document.getElementById("note-backlinks").innerHTML = bl.length
