@@ -196,6 +196,15 @@ def graph():
                 dst = "ext:" + t
                 nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 2})
             links.append({"source": src, "target": dst})
+    # size nodes by connectivity (more links = bigger) so hubs stand out, like a real
+    # knowledge graph; explicit `type: hub` notes stay large regardless.
+    degree = {}
+    for l in links:
+        degree[l["source"]] = degree.get(l["source"], 0) + 1
+        degree[l["target"]] = degree.get(l["target"], 0) + 1
+    for nid, node in nodes.items():
+        if node["val"] != 16:  # not an explicit hub
+            node["val"] = min(2 + degree.get(nid, 0) * 2, 30)
     return {"nodes": list(nodes.values()), "links": links}
 
 
