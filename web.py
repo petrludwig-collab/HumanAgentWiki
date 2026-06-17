@@ -25,6 +25,13 @@ from common import connect, NOTES_DIR
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Optional: hide body lines matching this regex when displaying a note
+# (e.g. HIDE_BODY_LINES='^Patri do \\[\\[' to drop a category-footer line). Display only.
+try:
+    HIDE_BODY_RE = re.compile(os.environ["HIDE_BODY_LINES"]) if os.environ.get("HIDE_BODY_LINES") else None
+except Exception:
+    HIDE_BODY_RE = None
+
 
 @asynccontextmanager
 async def lifespan(_app):
@@ -130,6 +137,8 @@ def get_note(file: str):
     with open(path, encoding="utf-8") as f:
         raw = f.read()
     fm, body = index.parse_frontmatter(raw)
+    if HIDE_BODY_RE:
+        body = "\n".join(ln for ln in body.splitlines() if not HIDE_BODY_RE.search(ln))
     title = fm.get("title", os.path.splitext(os.path.basename(file))[0])
     category = index.category_label(fm.get("category") or fm.get("project") or index.category_of(file))
     tags = [t.strip().strip('"').strip("'") for t in re.sub(r"[\[\]]", "", fm.get("tags", "")).split(",") if t.strip()]
