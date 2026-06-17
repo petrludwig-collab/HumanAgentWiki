@@ -190,6 +190,10 @@
         : "No notes.";
       document.getElementById("note-backlinks").innerHTML = "";
       document.getElementById("note").classList.add("open");
+      // highlight only the notes carrying this tag (dim the rest), like search
+      searchSet = new Set(list.map(b => b.id));
+      refreshStyles();
+      document.getElementById("search-clear").style.display = "inline";
     }
     async function openNote(id, focus=true){
       try {
