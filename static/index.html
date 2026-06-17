@@ -112,7 +112,8 @@
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
     let Graph, fullData = null, curNote = null, allTags = [];
-    const active = new Set(), nodeById = {}, nodeByTitle = {};
+    const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
+    const slugify = s => String(s).toLowerCase().replace(/[^a-z0-9-]/g, "");
     const adj = {}, inc = {};
     let hlNodes = new Set(), hlLinks = new Set(), pinnedId = null, dragReheated = false, searchSet = new Set();
 
@@ -180,7 +181,7 @@
       document.getElementById("note").classList.add("open");
       enterEdit();
     }
-    async function openByTitle(t){ const n = nodeByTitle[t]; if(n) openNote(n.id); else newNote(t); }
+    async function openByTitle(t){ const n = nodeByTitle[t] || nodeBySlug[slugify(t)]; if(n) openNote(n.id); else newNote(t); }
     function openCategory(c){ const node = nodeById["cat:" + c]; if(node){ focusNode(node); pinnedId = node.id; setHighlight(node); } }
     async function openTag(name){
       const list = await fetch("/api/tag?name="+encodeURIComponent(name)).then(r=>r.json());
@@ -304,8 +305,9 @@
     async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); buildLegend(legendGroups()); }
     function ingest(data){
       fullData = data;
-      for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k];
-      data.nodes.forEach(n=>{ nodeById[n.id]=n; nodeByTitle[n.label]=n; });
+      for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k]; for(const k in nodeBySlug) delete nodeBySlug[k];
+      data.nodes.forEach(n=>{ nodeById[n.id]=n; nodeByTitle[n.label]=n;
+        if(!String(n.id).startsWith("cat:") && !String(n.id).startsWith("ext:")) nodeBySlug[slugify(String(n.id).split("/").pop().replace(/\.md$/,""))]=n; });
       for(const k in adj) delete adj[k]; for(const k in inc) delete inc[k];
       data.links.forEach(l=>{ const s=(l.source&&l.source.id)||l.source, t=(l.target&&l.target.id)||l.target;
         (adj[s]=adj[s]||new Set()).add(t); (adj[t]=adj[t]||new Set()).add(s); (inc[s]=inc[s]||[]).push(l); (inc[t]=inc[t]||[]).push(l); });
