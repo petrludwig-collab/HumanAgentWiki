@@ -165,7 +165,11 @@
     }
     function closeNote(){ document.getElementById("note").classList.remove("open"); pinnedId=null; setHighlight(null); document.getElementById("ac").style.display="none"; }
 
-    function catOptions(sel){ return categories.map(c=>`<option${c===sel?" selected":""}>${esc(c)}</option>`).join(""); }
+    function catOptions(sel){
+      const cats = legendGroups().filter(c => c !== "(unresolved)");
+      if(sel && !cats.includes(sel)) cats.unshift(sel);
+      return cats.map(c=>`<option${c===sel?" selected":""}>${esc(c)}</option>`).join("");
+    }
     function newNote(title){
       curNote = {id:null, title:title||"", category:categories[0]||"", body:"", backlinks:[]};
       document.getElementById("note-edit").style.display = "none";

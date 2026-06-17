@@ -83,7 +83,10 @@ def process_file(path):
         raw = f.read()
     fm, body = parse_frontmatter(raw)
     f_title  = fm.get('title', os.path.splitext(os.path.basename(rel))[0])
-    category = category_label(fm.get('category') or fm.get('project') or category_of(rel))
+    raw = fm.get('category') or fm.get('project') or category_of(rel)
+    if str(raw).strip().lower() == 'uncategorized':   # placeholder -> fall back to project/folder
+        raw = fm.get('project') or category_of(rel)
+    category = category_label(raw)
     node_type = 'hub' if fm.get('type') == 'hub' else 'note'
     tags = [t.strip().strip('"').strip("'") for t in re.sub(r'[\[\]]', '', fm.get('tags', '')).split(',') if t.strip()]
     out = []
