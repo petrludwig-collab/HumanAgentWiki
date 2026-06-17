@@ -84,6 +84,11 @@ def process_file(path):
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
                         links=links, text=full, meta=json.dumps(fm, ensure_ascii=False),
                         emb_text=emb_text))
+    if not out:  # short note (title + a couple of links): still emit one node so it
+        text = (f_title + "\n" + body).strip() or f_title   # appears and links to it resolve
+        out.append(dict(file=rel, category=category, node_type=node_type, title=f_title[:200],
+                        links=LINK_RE.findall(body), text=text,
+                        meta=json.dumps(fm, ensure_ascii=False), emb_text=text))
     return out
 
 
