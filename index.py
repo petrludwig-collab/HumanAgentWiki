@@ -85,6 +85,7 @@ def process_file(path):
     f_title  = fm.get('title', os.path.splitext(os.path.basename(rel))[0])
     category = category_label(fm.get('category') or fm.get('project') or category_of(rel))
     node_type = 'hub' if fm.get('type') == 'hub' else 'note'
+    tags = [t.strip().strip('"').strip("'") for t in re.sub(r'[\[\]]', '', fm.get('tags', '')).split(',') if t.strip()]
     out = []
     for header, content in split_blocks(body):
         full = (header + '\n' + content).strip() if header else content.strip()
@@ -94,19 +95,19 @@ def process_file(path):
         links = LINK_RE.findall(full)
         emb_text = f"{f_title} - {title}\n{content}".strip() if title != f_title else full
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
-                        links=links, text=full, meta=json.dumps(fm, ensure_ascii=False),
+                        links=links, tags=tags, text=full, meta=json.dumps(fm, ensure_ascii=False),
                         emb_text=emb_text))
     if not out:  # short note (title + a couple of links): still emit one node so it
         text = (f_title + "\n" + body).strip() or f_title   # appears and links to it resolve
         out.append(dict(file=rel, category=category, node_type=node_type, title=f_title[:200],
-                        links=LINK_RE.findall(body), text=text,
+                        links=LINK_RE.findall(body), tags=tags, text=text,
                         meta=json.dumps(fm, ensure_ascii=False), emb_text=text))
     return out
 
 
 INSERT_SQL = """
-    INSERT INTO chunks (file, category, node_type, title, links, text, meta, embedding, tsv)
-    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, to_tsvector('simple', unaccent(%s)))
+    INSERT INTO chunks (file, category, node_type, title, links, tags, text, meta, embedding, tsv)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, to_tsvector('simple', unaccent(%s)))
 """
 
 
@@ -137,7 +138,7 @@ def reindex_files(cur, abs_files):
         vecs = embed([c['emb_text'] for c in chunks], batch_size=8)
         for c, v in zip(chunks, vecs):
             cur.execute(INSERT_SQL, (c['file'], c['category'], c['node_type'], c['title'],
-                                     c['links'], c['text'], c['meta'], v, c['text']))
+                                     c['links'], c['tags'], c['text'], c['meta'], v, c['text']))
     return len(chunks)
 
 

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     node_type   text,                   -- e.g. 'note' | 'hub'
     title       text,
     links       text[],                 -- [[wikilinks]] found in the chunk
+    tags        text[],                 -- frontmatter tags
     text        text NOT NULL,          -- chunk content
     meta        jsonb DEFAULT '{}',     -- optional/extensible metadata (date, tags, custom fields)
     embedding   vector(1024),           -- BGE-M3 (1024-dim); 'cli.py init-db' substitutes EMB_DIM
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS chunks_hnsw  ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv   ON chunks USING gin (tsv);
 CREATE INDEX IF NOT EXISTS chunks_links ON chunks USING gin (links);
+CREATE INDEX IF NOT EXISTS chunks_tags  ON chunks USING gin (tags);
 CREATE INDEX IF NOT EXISTS chunks_trgm  ON chunks USING gin (text gin_trgm_ops);
 
 -- User-defined categories, managed from the web UI (+/-). Notes reference a

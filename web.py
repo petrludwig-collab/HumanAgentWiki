@@ -226,6 +226,26 @@ def api_search(q: str, k: int = 10):
     return server.search(q, k=k)
 
 
+# ---------- tags ----------
+@app.get("/api/tags")
+def tags_list():
+    conn = connect(); cur = conn.cursor()
+    cur.execute("SELECT t, count(DISTINCT file) AS c FROM chunks, unnest(tags) AS t "
+                "GROUP BY t ORDER BY c DESC")
+    out = [{"tag": r[0], "count": r[1]} for r in cur.fetchall()]
+    conn.close()
+    return out
+
+
+@app.get("/api/tag")
+def tag_notes(name: str):
+    conn = connect(); cur = conn.cursor(row_factory=dict_row)
+    cur.execute("SELECT DISTINCT file, title FROM chunks WHERE %s = ANY(tags) ORDER BY title", (name,))
+    out = [{"id": r["file"], "label": r["title"]} for r in cur.fetchall()]
+    conn.close()
+    return out
+
+
 @app.get("/")
 def root():
     return RedirectResponse("/static/index.html")

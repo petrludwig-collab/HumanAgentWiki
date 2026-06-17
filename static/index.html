@@ -14,6 +14,9 @@
     #search::placeholder { color: #64748b; }
     #results { max-height: 38vh; overflow-y: auto; margin-bottom: 6px; }
     #results .res { padding: 5px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
+    #results .restag { color: #c084fc; }
+    #note .notelist .nl { display: block; padding: 5px 7px; color: #cbd5e1; cursor: pointer; border-radius: 6px; font-size: 12px; }
+    #note .notelist .nl:hover { background: #1e293b; }
     #results .res:hover { background: #1e293b; }
     #results .res.dim { color: #64748b; cursor: default; }
     #results .restype { color: #64748b; }
@@ -93,7 +96,7 @@
     function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-    let Graph, fullData = null, curNote = null;
+    let Graph, fullData = null, curNote = null, allTags = [];
     const active = new Set(), nodeById = {}, nodeByTitle = {};
     const adj = {}, inc = {};
     let hlNodes = new Set(), hlLinks = new Set(), pinnedId = null, dragReheated = false, searchSet = new Set();
@@ -158,6 +161,18 @@
       enterEdit();
     }
     async function openByTitle(t){ const n = nodeByTitle[t]; if(n) openNote(n.id); else newNote(t); }
+    async function openTag(name){
+      const list = await api("/api/tag?name="+encodeURIComponent(name));
+      curNote = null;
+      document.getElementById("note-edit").style.display = "none";
+      document.getElementById("note-title").textContent = "🏷 " + name;
+      document.getElementById("note-meta").textContent = list.length + " notes";
+      document.getElementById("note-body").innerHTML = list.length
+        ? '<div class="notelist">' + list.map(b=>`<div class="nl" onclick="openNote('${b.id.replace(/'/g,"\\'")}')">${esc(b.label)}</div>`).join("") + "</div>"
+        : "No notes.";
+      document.getElementById("note-backlinks").innerHTML = "";
+      document.getElementById("note").classList.add("open");
+    }
     async function openNote(id, focus=true){
       try {
         if(String(id).startsWith("ext:")){ newNote(String(id).slice(4)); return; }
@@ -225,7 +240,10 @@
       refreshStyles();
       if(!q){ box.innerHTML=""; return; }
       const hits = Object.values(nodeById).filter(n=>(n.label||"").toLowerCase().includes(q)).sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
-      box.innerHTML = hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)}</div>`).join("") || '<div class="res dim">no results</div>';
+      const tagHits = allTags.filter(t=>String(t.tag).toLowerCase().includes(q)).slice(0,8);
+      let html = tagHits.map(t=>`<div class="res restag" onclick="openTag('${String(t.tag).replace(/'/g,"\\'")}')">🏷 ${esc(t.tag)} <span class="restype">(${t.count})</span></div>`).join("");
+      html += hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)}</div>`).join("");
+      box.innerHTML = html || '<div class="res dim">no results</div>';
     }
 
     // [[ autocomplete in the editor textarea
@@ -263,6 +281,7 @@
 
     (async () => {
       await loadCats();
+      allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);
       const data = await fetch("/api/graph").then(r=>r.json());
       ingest(data);
       const groups = legendGroups();
