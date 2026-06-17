@@ -18,6 +18,8 @@
     #results { max-height: 38vh; overflow-y: auto; margin-bottom: 6px; }
     #results .res { padding: 5px 7px; font-size: 12px; color: #cbd5e1; cursor: pointer; border-radius: 6px; }
     #results .restag { color: #c084fc; }
+    #results .restag-node { color: #e9d5ff; font-weight: 700; }
+    #results .restag-node b { font-weight: 700; }
     #note .notelist .nl { display: block; padding: 5px 7px; color: #cbd5e1; cursor: pointer; border-radius: 6px; font-size: 12px; }
     #note .notelist .nl:hover { background: #1e293b; }
     #results .res:hover { background: #1e293b; }
@@ -351,8 +353,13 @@
       refreshStyles();
       if(!q){ box.innerHTML=""; return; }
       const hits = Object.values(nodeById).filter(n=>(n.label||"").toLowerCase().includes(q)).sort((a,b)=>a.label.localeCompare(b.label)).slice(0,25);
-      const tagHits = allTags.filter(t=>String(t.tag).toLowerCase().includes(q)).slice(0,8);
-      let html = tagHits.map(t=>`<div class="res restag" onclick="openTag('${String(t.tag).replace(/'/g,"\\'")}')">🏷 ${esc(t.tag)} <span class="restype">(${t.count})</span></div>`).join("");
+      const isNodeTag = t => String(t.tag) in nodeTagCat;
+      const tagHits = allTags.filter(t=>String(t.tag).toLowerCase().includes(q))
+        .sort((a,b)=> (isNodeTag(b)?1:0) - (isNodeTag(a)?1:0))   // node-tags first
+        .slice(0,8);
+      let html = tagHits.map(t=>{ const nd = isNodeTag(t);
+        return `<div class="res restag${nd?' restag-node':''}" onclick="openTag('${String(t.tag).replace(/'/g,"\\'")}')">${nd?'● ':'🏷 '}${nd?'<b>'+esc(t.tag)+'</b>':esc(t.tag)} <span class="restype">(${t.count})</span></div>`;
+      }).join("");
       html += hits.map(n=>`<div class="res" onclick="openNote('${n.id.replace(/'/g,"\\'")}')">${esc(n.label)}</div>`).join("");
       box.innerHTML = html || '<div class="res dim">no results</div>';
     }
