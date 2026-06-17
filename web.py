@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 import index
@@ -159,6 +160,32 @@ def save_note(n: NoteIn):
                 (rel, index.file_hash(path)))
     conn.close()
     return {"ok": True, "file": rel}
+
+
+# ---------- graph ----------
+@app.get("/api/graph")
+def graph():
+    """Nodes (one per note file) and links (from [[wikilinks]]) for the 3D view."""
+    conn = connect()
+    cur = conn.cursor(row_factory=dict_row)
+    cur.execute("SELECT DISTINCT ON (file) file, title, category FROM chunks ORDER BY file, id")
+    base = cur.fetchall()
+    cur.execute("SELECT file, array_agg(DISTINCT l) AS links "
+                "FROM chunks CROSS JOIN LATERAL unnest(links) AS l GROUP BY file")
+    links_by_file = {r["file"]: r["links"] for r in cur.fetchall()}
+    conn.close()
+    title_to_file = {r["title"]: r["file"] for r in base}
+    nodes = {r["file"]: {"id": r["file"], "label": r["title"], "category": r["category"]}
+             for r in base}
+    links = []
+    for src, targets in links_by_file.items():
+        for t in targets:
+            dst = title_to_file.get(t)
+            if dst is None:                       # link to a note that doesn't exist yet
+                dst = "ext:" + t
+                nodes.setdefault(dst, {"id": dst, "label": t, "category": "(unresolved)"})
+            links.append({"source": src, "target": dst})
+    return {"nodes": list(nodes.values()), "links": links}
 
 
 # ---------- search ----------

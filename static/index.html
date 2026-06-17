@@ -6,152 +6,165 @@
 <title>HumanAgentWiki</title>
 <style>
   :root { --bg:#0f1115; --panel:#171a21; --line:#272b35; --fg:#e6e8ee; --mut:#8b93a7; --acc:#5b8cff; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-         background:var(--bg); color:var(--fg); }
-  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
-  header h1 { font-size:18px; margin:0; } header .sub { color:var(--mut); font-size:13px; }
-  main { display:grid; grid-template-columns:240px 1fr; gap:0; height:calc(100vh - 53px); }
-  aside { border-right:1px solid var(--line); padding:16px; overflow:auto; }
-  section.editor { padding:18px 22px; overflow:auto; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:0 0 10px; }
-  .cat { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:7px; cursor:pointer; }
-  .cat:hover { background:var(--panel); }
-  .cat.active { background:#1e2742; }
-  .cat .x { color:var(--mut); border:none; background:none; cursor:pointer; font-size:16px; visibility:hidden; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); overflow:hidden; }
+  header { height:52px; padding:0 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:17px; margin:0; } header .sub { color:var(--mut); font-size:13px; flex:1; }
+  button.primary { background:var(--acc); color:#fff; border:none; border-radius:7px; padding:8px 14px; cursor:pointer; font:inherit; }
+  button.ghost { background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:7px 11px; cursor:pointer; color:var(--fg); font:inherit; }
+  #layout { display:flex; height:calc(100vh - 52px); position:relative; overflow:hidden; }
+  aside { width:260px; flex:none; border-right:1px solid var(--line); padding:14px; overflow:auto; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:14px 0 8px; }
+  h2:first-child { margin-top:0; }
+  .cat { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:7px; cursor:default; }
+  .cat:hover { background:var(--panel); } .cat .x { color:var(--mut); background:none; border:none; cursor:pointer; visibility:hidden; font-size:15px; }
   .cat:hover .x { visibility:visible; }
-  .addrow { display:flex; gap:6px; margin-top:10px; }
-  input, textarea, select, button { font:inherit; color:var(--fg); }
-  input, textarea, select { background:#10131a; border:1px solid var(--line); border-radius:7px; padding:8px 10px; width:100%; }
-  textarea { min-height:300px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-  button.primary { background:var(--acc); color:#fff; border:none; border-radius:7px; padding:9px 16px; cursor:pointer; }
-  button.ghost { background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:8px 12px; cursor:pointer; }
-  .field { margin-bottom:12px; } .field label { display:block; color:var(--mut); font-size:12px; margin-bottom:4px; }
-  .row { display:flex; gap:10px; align-items:flex-end; }
-  .search { margin:8px 0 16px; } .results .r { padding:8px 10px; border:1px solid var(--line); border-radius:7px; margin-bottom:6px; cursor:pointer; }
-  .results .r:hover { border-color:var(--acc); } .results .r .t { font-weight:600; } .results .r .s { color:var(--mut); font-size:13px; }
-  .pill { font-size:11px; color:var(--acc); border:1px solid #2a3a6b; border-radius:20px; padding:1px 8px; }
-  #ac { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:7px; max-height:180px; overflow:auto; display:none; z-index:9; }
-  #ac div { padding:6px 10px; cursor:pointer; } #ac div:hover, #ac div.sel { background:#1e2742; }
-  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1e2742; border:1px solid var(--acc); padding:9px 16px; border-radius:8px; opacity:0; transition:.2s; }
+  .addrow { display:flex; gap:6px; margin-top:8px; }
+  input, textarea, select { background:#10131a; border:1px solid var(--line); border-radius:7px; padding:8px 10px; width:100%; color:var(--fg); font:inherit; }
+  textarea { min-height:240px; resize:vertical; font-family:ui-monospace,Menlo,monospace; }
+  #graph { flex:1; min-width:0; position:relative; overflow:hidden; background:var(--bg); }
+  .results .r { padding:7px 9px; border:1px solid var(--line); border-radius:7px; margin-bottom:6px; cursor:pointer; font-size:13px; }
+  .results .r:hover { border-color:var(--acc); } .results .r .t { font-weight:600; }
+  .pill { font-size:10px; color:var(--acc); border:1px solid #2a3a6b; border-radius:20px; padding:1px 7px; margin-left:4px; }
+  #editor { position:absolute; top:0; right:0; width:380px; height:100%; background:var(--panel); border-left:1px solid var(--line);
+            padding:16px; overflow:auto; transform:translateX(100%); transition:transform .2s ease; box-shadow:-12px 0 30px rgba(0,0,0,.35); }
+  #editor.open { transform:translateX(0); }
+  #editor .top { display:flex; align-items:center; justify-content:space-between; }
+  .field { margin:10px 0; } .field label { display:block; color:var(--mut); font-size:12px; margin-bottom:4px; }
+  #ac { position:absolute; background:#10131a; border:1px solid var(--line); border-radius:7px; max-height:160px; overflow:auto; display:none; z-index:9; }
+  #ac div { padding:6px 10px; cursor:pointer; } #ac div.sel, #ac div:hover { background:#1e2742; }
+  .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#1e2742; border:1px solid var(--acc); padding:8px 15px; border-radius:8px; opacity:0; transition:.2s; }
   .toast.show { opacity:1; }
 </style>
 </head>
 <body>
 <header>
   <h1>🧠 HumanAgentWiki</h1>
-  <span class="sub">your second brain — humans &amp; agents share it</span>
+  <span class="sub">your second brain - humans &amp; agents share it</span>
+  <button class="primary" onclick="newNote()">+ New note</button>
 </header>
-<main>
+
+<div id="layout">
   <aside>
     <h2>Categories</h2>
     <div id="cats"></div>
-    <div class="addrow">
-      <input id="newcat" placeholder="New category…" />
-      <button class="ghost" onclick="addCat()">+</button>
-    </div>
+    <div class="addrow"><input id="newcat" placeholder="New category..."><button class="ghost" onclick="addCat()">+</button></div>
+    <h2>Search</h2>
+    <input id="q" placeholder="Search by meaning..." onkeydown="if(event.key==='Enter')doSearch()">
+    <div class="results" id="results" style="margin-top:8px"></div>
   </aside>
 
-  <section class="editor">
-    <div class="search">
-      <input id="q" placeholder="🔎 Search your wiki by meaning…" onkeydown="if(event.key==='Enter')doSearch()" />
-      <div class="results" id="results"></div>
-    </div>
+  <div id="graph"></div>
 
-    <h2>New / edit note</h2>
-    <div class="row">
-      <div class="field" style="flex:0 0 200px"><label>Category</label><select id="cat"></select></div>
-      <div class="field" style="flex:1"><label>Title</label><input id="title" placeholder="Note title" /></div>
-    </div>
-    <div class="field">
-      <label>Text — type <code>[[</code> to link other notes</label>
-      <textarea id="text" placeholder="Write here. Link with [[Another Note]]."></textarea>
-    </div>
-    <input type="hidden" id="file" />
-    <button class="primary" onclick="save()">Save → commit + index</button>
-    <button class="ghost" onclick="clearEditor()">New</button>
+  <section id="editor">
+    <div class="top"><h2 id="ed-title" style="margin:0">Note</h2><button class="ghost" onclick="closeEditor()">×</button></div>
+    <div class="field"><label>Category</label><select id="cat"></select></div>
+    <div class="field"><label>Title</label><input id="title" placeholder="Note title"></div>
+    <div class="field"><label>Text - type [[ to link other notes</label><textarea id="text" placeholder="Write here. Link with [[Another Note]]."></textarea></div>
+    <input type="hidden" id="file">
+    <button class="primary" onclick="save()">Save</button>
   </section>
-</main>
+</div>
 <div id="ac"></div>
 <div class="toast" id="toast"></div>
 
+<script src="/static/3d-force-graph.min.js"></script>
 <script>
 const $ = s => document.querySelector(s);
-let activeCat = null, titles = [];
-
-async function api(path, opts) { const r = await fetch(path, opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+let titles = [], Graph = null;
+async function api(p,o){ const r=await fetch(p,o); if(!r.ok) throw new Error(await r.text()); return r.json(); }
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
 
+// ---- categories ----
 async function loadCats(){
   const cats = await api('/api/categories');
-  $('#cats').innerHTML = cats.map(c =>
-    `<div class="cat ${c===activeCat?'active':''}" onclick="pickCat('${c.replace(/'/g,"\\'")}')">
-       <span>${c}</span><button class="x" onclick="event.stopPropagation();delCat('${c.replace(/'/g,"\\'")}')">×</button></div>`).join('')
-    || '<div style="color:var(--mut)">No categories yet — add one →</div>';
+  $('#cats').innerHTML = cats.map(c=>`<div class="cat"><span>${c}</span><button class="x" onclick="delCat('${c.replace(/'/g,"\\'")}')">×</button></div>`).join('')
+    || '<div style="color:var(--mut)">No categories yet - add one below</div>';
   $('#cat').innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
-  if(activeCat) $('#cat').value = activeCat;
 }
 async function addCat(){ const n=$('#newcat').value.trim(); if(!n)return;
   await api('/api/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})});
   $('#newcat').value=''; await loadCats(); toast('Category added'); }
 async function delCat(n){ if(!confirm('Remove category "'+n+'"? (notes are kept)'))return;
-  await api('/api/categories/'+encodeURIComponent(n),{method:'DELETE'}); if(activeCat===n)activeCat=null; await loadCats(); }
-function pickCat(c){ activeCat=c; $('#cat').value=c; loadCats(); }
+  await api('/api/categories/'+encodeURIComponent(n),{method:'DELETE'}); await loadCats(); }
 
-async function doSearch(){
-  const q=$('#q').value.trim(); if(!q)return;
-  const res = await api('/api/search?q='+encodeURIComponent(q));
-  $('#results').innerHTML = res.map(r=>
-    `<div class="r" onclick="openNote('${r.file.replace(/'/g,"\\'")}')">
-       <div class="t">${r.title} <span class="pill">${r.category||''}</span></div>
-       <div class="s">${(r.snippet||'').replace(/</g,'&lt;')}</div></div>`).join('') || '<div style="color:var(--mut)">No results</div>';
+// ---- 3D graph ----
+function initGraph(){
+  Graph = ForceGraph3D()(document.getElementById('graph'))
+    .backgroundColor('#0f1115')
+    .nodeLabel('label')
+    .nodeAutoColorBy('category')
+    .nodeRelSize(5)
+    .linkColor(()=> 'rgba(120,130,150,0.35)')
+    .linkOpacity(0.5)
+    .onNodeClick(n=>{
+      const dist=120, r=Math.hypot(n.x,n.y,n.z)||1;
+      Graph.cameraPosition({x:n.x*(1+dist/r), y:n.y*(1+dist/r), z:n.z*(1+dist/r)}, n, 800);
+      if(String(n.id).startsWith('ext:')) newNote(n.label);
+      else openNote(n.id);
+    });
+  resizeGraph();
 }
+function resizeGraph(){ const el=$('#graph'); if(Graph){ Graph.width(el.clientWidth); Graph.height(el.clientHeight); } }
+window.addEventListener('resize', resizeGraph);
+
+// ---- editor ----
+function openEditorPanel(){ $('#editor').classList.add('open'); setTimeout(resizeGraph,220); }
+function closeEditor(){ $('#editor').classList.remove('open'); $('#ac').style.display='none'; setTimeout(resizeGraph,220); }
+function newNote(title){ $('#ed-title').textContent='New note'; $('#title').value=title||''; $('#text').value=''; $('#file').value=''; openEditorPanel(); $('#title').focus(); }
 async function openNote(file){
   const n = await api('/api/note?file='+encodeURIComponent(file));
-  const m = n.content.match(/^title:\s*(.*)$/m);
-  const c = n.content.match(/^category:\s*(.*)$/m);
-  const body = n.content.replace(/^---[\s\S]*?---\s*/, '');
-  $('#title').value = m ? m[1].trim() : '';
-  $('#text').value = body.trim();
+  const m = n.content.match(/^title:\s*(.*)$/m), c = n.content.match(/^category:\s*(.*)$/m);
+  $('#ed-title').textContent='Edit note';
+  $('#title').value = m?m[1].trim():'';
+  $('#text').value = n.content.replace(/^---[\s\S]*?---\s*/,'').trim();
   if(c) $('#cat').value = c[1].trim();
-  $('#file').value = file;
-  toast('Loaded - edit & save');
-  window.scrollTo(0, document.body.scrollHeight);
+  $('#file').value = file; openEditorPanel();
 }
-function clearEditor(){ $('#title').value=''; $('#text').value=''; $('#file').value=''; }
 async function save(){
   const title=$('#title').value.trim(); if(!title){toast('Title required');return;}
   await api('/api/note',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({category:$('#cat').value,title,text:$('#text').value,file:$('#file').value||null})});
-  toast('Saved + committed + indexed'); clearEditor(); titles = await api('/api/titles');
+  toast('Saved - committed + indexed'); closeEditor();
+  titles = await api('/api/titles'); await loadGraphData();
+}
+async function loadGraphData(){ Graph.graphData(await api('/api/graph')); }
+
+// ---- search ----
+async function doSearch(){
+  const q=$('#q').value.trim(); if(!q)return;
+  const res = await api('/api/search?q='+encodeURIComponent(q));
+  $('#results').innerHTML = res.map(r=>`<div class="r" onclick="openNote('${r.file.replace(/'/g,"\\'")}')"><span class="t">${r.title}</span><span class="pill">${r.category||''}</span></div>`).join('')
+    || '<div style="color:var(--mut)">No results</div>';
 }
 
-// [[ autocomplete
-const ta=$('#text'), ac=$('#ac'); let acSel=0, acItems=[];
-ta.addEventListener('input', ()=>{
-  const pos=ta.selectionStart, before=ta.value.slice(0,pos), m=before.match(/\[\[([^\]]*)$/);
-  if(!m){ ac.style.display='none'; return; }
-  const term=m[1].toLowerCase();
-  acItems = titles.filter(t=>t.toLowerCase().includes(term)).slice(0,8);
-  if(!acItems.length){ ac.style.display='none'; return; }
-  acSel=0; ac.innerHTML=acItems.map((t,i)=>`<div class="${i===0?'sel':''}" onclick="pick(${i})">${t}</div>`).join('');
-  const r=ta.getBoundingClientRect(); ac.style.left=r.left+12+'px'; ac.style.top=r.top+34+'px'; ac.style.display='block';
+// ---- [[ autocomplete ----
+const ta=()=>$('#text'), ac=()=>$('#ac'); let acSel=0, acItems=[];
+document.addEventListener('input', e=>{
+  if(e.target.id!=='text') return;
+  const t=ta(), pos=t.selectionStart, m=t.value.slice(0,pos).match(/\[\[([^\]]*)$/);
+  if(!m){ ac().style.display='none'; return; }
+  acItems = titles.filter(x=>x.toLowerCase().includes(m[1].toLowerCase())).slice(0,8);
+  if(!acItems.length){ ac().style.display='none'; return; }
+  acSel=0; ac().innerHTML=acItems.map((x,i)=>`<div class="${i===0?'sel':''}" onclick="pick(${i})">${x}</div>`).join('');
+  const r=t.getBoundingClientRect(); ac().style.left=r.left+'px'; ac().style.top=(r.top+30)+'px'; ac().style.width=r.width+'px'; ac().style.display='block';
 });
-ta.addEventListener('keydown', e=>{
-  if(ac.style.display!=='block')return;
+document.addEventListener('keydown', e=>{
+  if(e.target.id!=='text' || ac().style.display!=='block') return;
   if(e.key==='ArrowDown'){e.preventDefault();acSel=(acSel+1)%acItems.length;}
   else if(e.key==='ArrowUp'){e.preventDefault();acSel=(acSel-1+acItems.length)%acItems.length;}
   else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();pick(acSel);return;}
-  else if(e.key==='Escape'){ac.style.display='none';return;}
+  else if(e.key==='Escape'){ac().style.display='none';return;}
   else return;
-  [...ac.children].forEach((d,i)=>d.className=i===acSel?'sel':'');
+  [...ac().children].forEach((d,i)=>d.className=i===acSel?'sel':'');
 });
-function pick(i){
-  const pos=ta.selectionStart, before=ta.value.slice(0,pos).replace(/\[\[([^\]]*)$/, '[['+acItems[i]+']]');
-  ta.value = before + ta.value.slice(pos); ac.style.display='none'; ta.focus();
+function pick(i){ const t=ta(), pos=t.selectionStart;
+  t.value = t.value.slice(0,pos).replace(/\[\[([^\]]*)$/,'[['+acItems[i]+']]') + t.value.slice(pos);
+  ac().style.display='none'; t.focus();
 }
 
-(async()=>{ await loadCats(); titles = await api('/api/titles'); })();
+(async()=>{ await loadCats(); titles = await api('/api/titles'); initGraph(); await loadGraphData(); })();
 </script>
 </body>
 </html>

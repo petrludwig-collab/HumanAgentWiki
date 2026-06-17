@@ -93,9 +93,10 @@ Tools exposed: `brain_search`, `brain_get`, `brain_neighbors`.
 
 ## Web UI
 
-`python cli.py web` opens a small wiki-style interface (no build step, vanilla JS):
-- **Categories** — add/remove your top-level categories with +/–.
-- **Note editor** — pick a category, write, and link other notes with `[[...]]` (autocomplete). Saving writes a Markdown file, **commits it to git** (full history), and re-indexes it.
+`python cli.py web` opens a wiki-style interface (no build step, vanilla JS):
+- **3D graph** — your notes as an interactive 3D graph (rotate / zoom / pan), nodes coloured by category, edges from `[[links]]`. Click a node to open it. This is the centerpiece.
+- **Categories** — add/remove your top-level categories with +/- (left panel).
+- **Note editor** — slides in on the right: pick a category, write, and link other notes with `[[...]]` (autocomplete). Saving writes a Markdown file, **commits it to git** (full history), and re-indexes it.
 - **Search** — semantic search across everything.
 
 ## Development
@@ -106,8 +107,6 @@ pytest        # unit tests for the pure helpers (no DB needed)
 ```
 
 ## On the roadmap
-
-- 🔮 **3D visualization** of the note graph (rotate / zoom / focus a slice).
 
 See [ROADMAP.md](ROADMAP.md).
 

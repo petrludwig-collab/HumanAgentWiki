@@ -25,8 +25,12 @@ HumanAgentWiki is being generalized from a working private system into a tool an
 - [x] **Unit tests** (`tests/`, pytest) for the pure helpers.
 - [x] **Hardening**: category-name path checks, ASCII-only stdout, `EMB_DIM` wired into `init-db`.
 
+## Done — 3D graph (v0.4)
+- [x] **3D visualization** (3d-force-graph): notes as an interactive 3D graph, the
+  centerpiece of the UI; nodes coloured by category, edges from `[[links]]`, click to edit.
+- [x] **Layout**: 3D graph main canvas, categories (+/-) left, editor slides in on the right.
+
 ## Next
-- [ ] **3D visualization** of the note graph (rotate / zoom / focus a slice).
 - [ ] Inline render of `[[links]]` as clickable links in a read view.
 - [ ] Optional auth for exposing the web UI beyond localhost.
 
