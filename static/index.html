@@ -46,6 +46,10 @@
     .btn.blue { background: #2563eb; border-color: #2563eb; }
     #newnote { width: 100%; margin-top: 8px; }
     #stats { color: #94a3b8; margin-top: 8px; font-size: 12px; } #fps { color: #475569; }
+    #statsbox { margin-top: 6px; border-top: 1px solid #1e293b; padding-top: 7px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 11.5px; }
+    #statsbox .sv { color: #e5e7eb; font-weight: 600; }
+    #statsbox .sl { color: #64748b; }
+    #statsbox .full { grid-column: 1 / -1; color: #94a3b8; }
     #lblToggle { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer; user-select: none; }
     #lblToggle input { accent-color: #60a5fa; cursor: pointer; }
     #maplabels { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
@@ -151,6 +155,7 @@
     <button class="btn blue" id="newnote" onclick="newNote()">+ New note</button>
     <label id="lblToggle"><input type="checkbox" id="showLabels" checked /> Show main labels</label>
     <div id="stats">loading...</div>
+    <div id="statsbox"></div>
   </div>
   <div id="maplabels"></div>
   <div id="graph"></div>
@@ -652,7 +657,21 @@
     });
     function acPick(i){ const ta=acTA, pos=ta.selectionStart; ta.value = ta.value.slice(0,pos).replace(/\[\[([^\]]*)$/,"[["+acItems[i]+"]]")+ta.value.slice(pos); document.getElementById("ac").style.display="none"; ta.focus(); }
 
-    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); rebuildMapLabels(); buildLegend(legendGroups()); }
+    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); rebuildMapLabels(); buildLegend(legendGroups()); loadStats(); }
+    async function loadStats(){
+      const s = await fetch("/api/stats").then(r=>r.json()).catch(()=>null);
+      const box = document.getElementById("statsbox"); if(!box || !s) return;
+      const nf = n => (n||0).toLocaleString("en-US");
+      box.innerHTML =
+        `<div class="full">📄 <span class="sv">${nf(s.notes)}</span> <span class="sl">notes</span> &nbsp; 📝 <span class="sv">${nf(s.words)}</span> <span class="sl">words</span></div>`
+      + `<div class="full">🔤 <span class="sv">${nf(s.characters)}</span> <span class="sl">characters · ≈ ${nf(s.pages)} pages</span></div>`
+      + `<div>📁 <span class="sv">${s.categories}</span> <span class="sl">categories</span></div>`
+      + `<div>🏷 <span class="sv">${nf(s.tags)}</span> <span class="sl">tags</span></div>`
+      + `<div>● <span class="sv">${s.node_tags}</span> <span class="sl">node-tags</span></div>`
+      + `<div>🔮 <span class="sv">${nf(s.predictions)}</span> <span class="sl">predictions</span></div>`
+      + `<div>🔗 <span class="sv">${nf(s.wikilinks)}</span> <span class="sl">links</span></div>`
+      + (s.biggest ? `<div>🏆 <span class="sl">top:</span> <span class="sv">${esc(s.biggest.name)}</span></div>` : "");
+    }
     function ingest(data){
       fullData = data;
       for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k]; for(const k in nodeBySlug) delete nodeBySlug[k];
@@ -735,6 +754,7 @@
       const cb=document.getElementById("showLabels");
       cb.checked=labelsOn; cb.addEventListener("change", e=>{ labelsOn=e.target.checked; saveState({labels:labelsOn}); if(labelsOn) updateLabels(); else mapLabels.forEach(({el})=>el.style.display="none"); });
       if(labelsOn) updateLabels();
+      loadStats();
 
       setTimeout(overlayHide, 600);   // let the layout settle a moment before revealing
       // After the initial (nicely warmed) layout, drop synchronous warmup so later filter

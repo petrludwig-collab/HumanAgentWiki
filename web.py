@@ -123,6 +123,26 @@ def config():
     return {"categoryColors": colors, "categoryOrder": order}
 
 
+@app.get("/api/stats")
+def stats():
+    conn = connect(); cur = conn.cursor()
+    cur.execute("SELECT count(DISTINCT file) FROM chunks"); notes = cur.fetchone()[0]
+    cur.execute("SELECT count(DISTINCT category) FROM chunks"); cats = cur.fetchone()[0]
+    # characters/words: one representative text per file (the file's chunks concatenated)
+    cur.execute("SELECT coalesce(sum(char_length(text)), 0), coalesce(sum(array_length(regexp_split_to_array(btrim(text), '\\s+'), 1)), 0) FROM chunks")
+    chars, words = cur.fetchone()
+    cur.execute("SELECT count(DISTINCT t) FROM chunks CROSS JOIN LATERAL unnest(tags) AS t"); tags = cur.fetchone()[0]
+    cur.execute("SELECT count(*) FROM node_tags"); node_tags = cur.fetchone()[0]
+    cur.execute("SELECT count(DISTINCT file) FROM chunks WHERE 'Predikce' = ANY(tags)"); preds = cur.fetchone()[0]
+    cur.execute("SELECT count(*) FROM (SELECT file, unnest(links) FROM chunks) x"); wikilinks = cur.fetchone()[0]
+    cur.execute("SELECT category, count(DISTINCT file) c FROM chunks GROUP BY category ORDER BY c DESC LIMIT 1")
+    big = cur.fetchone()
+    conn.close()
+    return {"notes": notes, "categories": cats, "characters": int(chars), "words": int(words),
+            "tags": tags, "node_tags": node_tags, "predictions": preds, "wikilinks": wikilinks,
+            "pages": round(chars / 1800), "biggest": {"name": big[0], "count": big[1]} if big else None}
+
+
 class CategoryMeta(BaseModel):
     name: str
     color: str | None = None
