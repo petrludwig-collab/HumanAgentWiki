@@ -232,8 +232,9 @@
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         doApplyFilter();
         // Nodes keep their positions across filters, so the view re-settles visually fast.
-        // Hide after a short, animated window instead of waiting for the sim to fully cool (~5s).
-        clearTimeout(overlayTimer); overlayTimer = setTimeout(overlayHide, 1000);
+        // Show the animated loader for a fixed, deterministic window rather than waiting for the
+        // simulation to fully cool (~5s) — the graph keeps settling behind once it fades.
+        clearTimeout(overlayTimer); overlayTimer = setTimeout(overlayHide, 1100);
       }));
     }
 
@@ -535,8 +536,7 @@
           closeNote(); refreshStyles();
         })
         .onNodeDrag(()=>{ if(!dragReheated){ dragReheated=true; Graph.d3ReheatSimulation(); } })
-        .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; })
-        .onEngineStop(()=>{ overlayHide(); });   // hide the loader once the layout settles
+        .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; });
       Graph.d3Force("charge").strength(-60);
       progSet(80, "Rendering…");
       applyFilter();
