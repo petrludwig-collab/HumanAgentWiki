@@ -23,6 +23,9 @@ from common import connect, embed, NOTES_DIR
 HEADER_RE = re.compile(r'^(#{2,3})\s+(.*)$')
 LINK_RE   = re.compile(r'\[\[([^\]]+?)\]\]')
 SKIP_DIRS = ('/.git/', '/.obsidian/', '/node_modules/')
+# Optional allowlist of top-level folders to index, e.g. INCLUDE_DIRS='books,notes'.
+# Empty = index everything under NOTES_DIR. Lets you grow a vault one section at a time.
+INCLUDE_DIRS = [d.strip() for d in os.environ.get("INCLUDE_DIRS", "").split(",") if d.strip()]
 MIN_CHUNK_CHARS = 25  # skip trivially short blocks (stray lines, empty sections)
 
 
@@ -115,8 +118,12 @@ INSERT_SQL = """
 
 
 def list_files():
-    return [p for p in glob.glob(f"{NOTES_DIR}/**/*.md", recursive=True)
-            if not any(s in p + '/' for s in SKIP_DIRS)]
+    files = [p for p in glob.glob(f"{NOTES_DIR}/**/*.md", recursive=True)
+             if not any(s in p + '/' for s in SKIP_DIRS)]
+    if INCLUDE_DIRS:
+        files = [p for p in files
+                 if os.path.relpath(p, NOTES_DIR).split(os.sep)[0] in INCLUDE_DIRS]
+    return files
 
 
 def file_hash(path):
