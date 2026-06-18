@@ -123,7 +123,7 @@
     <div class="box2">
       <h3></h3>
       <p></p>
-      <div class="btns"><button class="btn cancel">Zrušit</button><button class="btn danger">Smazat</button></div>
+      <div class="btns"><button class="btn cancel">Cancel</button><button class="btn danger">Delete</button></div>
     </div>
   </div>
   <div id="bootscreen">
@@ -234,11 +234,11 @@
       const ed = editingCats;
       el.innerHTML = groups.map(g => {
         const on = active.has(g), real = g !== "(unresolved)";
-        const handle = (ed && real) ? `<span class="drag" title="Přetáhni pro změnu pořadí">⠿</span>` : (ed ? `<span class="drag" style="visibility:hidden">⠿</span>` : "");
+        const handle = (ed && real) ? `<span class="drag" title="Drag to reorder">⠿</span>` : (ed ? `<span class="drag" style="visibility:hidden">⠿</span>` : "");
         const swatch = (ed && real)
-          ? `<input type="color" class="cocol" value="${groupColor[g]||"#94a3b8"}" data-color="${g}" title="Změnit barvu">`
+          ? `<input type="color" class="cocol" value="${groupColor[g]||"#94a3b8"}" data-color="${g}" title="Change colour">`
           : `<span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span>`;
-        const del = (ed && real) ? `<span class="x" data-del="${g}" title="Smazat kategorii">−</span>` : "";
+        const del = (ed && real) ? `<span class="x" data-del="${g}" title="Remove category">−</span>` : "";
         return `<div class="leg${on?"":" off"}" data-g="${g}" ${ed&&real?'draggable="true"':''}>${handle}<span class="box">${on?"☑":"☐"}</span>${swatch}<span class="lname">${g}</span>${del}</div>`;
       }).join("")
       + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span> · <span class="ctl-link" id="leg-edit">${ed?"done":"edit"}</span></div>`
@@ -284,8 +284,8 @@
       await fetch("/api/category-order", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({order: reals})}).catch(()=>{});
     }
     function confirmDelCat(n){
-      showConfirm("Smazat kategorii „" + n + "“?",
-        "Kategorie zmizí z legendy. Samotné poznámky/soubory zůstanou zachované.",
+      showConfirm("Delete category “" + n + "”?",
+        "The category is removed from the legend. The notes/files themselves are kept.",
         () => delCat(n));
     }
     function doApplyFilter(){
@@ -299,7 +299,7 @@
     function applyFilter(){
       if(!fullData||!Graph) return;
       if(!booted){ doApplyFilter(); return; }          // initial boot: run synchronously
-      overlayShow("Aktualizuji výběr…");
+      overlayShow("Updating view…");
       // Let the overlay paint and its compositor animation start BEFORE the heavy relayout
       // blocks the main thread (re-adding a big category) — otherwise the bar never renders.
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -428,22 +428,22 @@
         '<div class="field"><label>Category</label><select class="f" id="tag-cat">'
         + cats.map(c=>`<option${c===curCat?" selected":""}>${esc(c)}</option>`).join("") + '</select></div>'
         + '<div class="field"><label style="cursor:pointer"><input type="checkbox" id="tag-isnode" '+(isNode?"checked":"")+'> Tag is also a node (links all its records)</label></div>'
-        + '<div class="edit-actions"><button class="btn blue" id="tag-save">💾 Save</button><button class="btn" id="tag-cancel">Cancel</button><button class="btn del" id="tag-delete">🗑 Smazat tag</button><span id="edit-status"></span></div>';
+        + '<div class="edit-actions"><button class="btn blue" id="tag-save">💾 Save</button><button class="btn" id="tag-cancel">Cancel</button><button class="btn del" id="tag-delete">🗑 Delete tag</button><span id="edit-status"></span></div>';
       document.getElementById("tag-cancel").onclick = () => openTag(name);
       document.getElementById("tag-save").onclick = () => saveTag(name);
       document.getElementById("tag-delete").onclick = () => showConfirm(
-        "Smazat tag „" + name + "“?",
-        "Tag se odebere ze VŠECH záznamů, které ho mají. Záznamy samotné zůstanou. Tohle nejde vrátit jedním klikem.",
+        "Delete tag “" + name + "”?",
+        "The tag is removed from ALL notes that carry it. The notes themselves are kept. This can't be undone with one click.",
         () => deleteTag(name));
     }
     async function deleteTag(name){
-      const st = document.getElementById("edit-status"); if(st) st.textContent = "mažu…";
+      const st = document.getElementById("edit-status"); if(st) st.textContent = "deleting…";
       try {
         const r = await fetch("/api/tag?name=" + encodeURIComponent(name), {method:"DELETE"}).then(r=>r.json());
         await refreshNodeTags(); await reloadGraph();
         buildLegend(legendGroups()); applyFilter();
         closeNote();
-      } catch(e){ if(st) st.textContent = "chyba: " + e.message; }
+      } catch(e){ if(st) st.textContent = "error: " + e.message; }
     }
     async function saveTag(name){
       const isNode = document.getElementById("tag-isnode").checked;
@@ -489,7 +489,7 @@
       + '<div class="field"><label>Category</label><select class="f" id="edit-cat">'+catOptions(curNote.category)+'</select></div>'
       + '<div class="field"><label>Text - type [[ to link other notes</label><textarea id="edit-area" spellcheck="false"></textarea></div>'
       + '<div class="edit-actions"><button class="btn blue" id="edit-save">💾 Save</button><button class="btn" id="edit-cancel">Cancel</button>'
-      + (curNote.id ? '<button class="btn del" id="edit-delete">🗑 Smazat</button>' : '')
+      + (curNote.id ? '<button class="btn del" id="edit-delete">🗑 Delete</button>' : '')
       + '<span id="edit-status"></span></div>';
       document.getElementById("edit-title").value = curNote.title || "";
       document.getElementById("edit-area").value = curNote.body || "";
@@ -498,8 +498,8 @@
       document.getElementById("edit-cancel").onclick = () => curNote.id ? openNote(curNote.id, false) : closeNote();
       document.getElementById("edit-save").onclick = saveEdit;
       if(curNote.id){ document.getElementById("edit-delete").onclick = () => showConfirm(
-        "Smazat záznam „" + (curNote.title||curNote.id) + "“?",
-        "Soubor se smaže z Mozku i z disku (git commit). Tohle nejde vrátit jedním klikem.",
+        "Delete note “" + (curNote.title||curNote.id) + "”?",
+        "The file is deleted from the wiki and from disk (git commit). This can't be undone with one click.",
         () => deleteNote(curNote.id)); }
       ta.onkeydown = e => { if((e.metaKey||e.ctrlKey)&&e.key==="Enter") saveEdit(); };
     }
@@ -517,12 +517,12 @@
       } catch(e){ st.textContent = "error: " + e.message; }
     }
     async function deleteNote(file){
-      const st = document.getElementById("edit-status"); if(st) st.textContent = "mažu…";
+      const st = document.getElementById("edit-status"); if(st) st.textContent = "deleting…";
       try {
         await fetch("/api/note?file=" + encodeURIComponent(file), {method:"DELETE"});
         document.getElementById("note-backlinks").style.display = "";
         await reloadGraph(); applyFilter(); closeNote();
-      } catch(e){ if(st) st.textContent = "chyba: " + e.message; }
+      } catch(e){ if(st) st.textContent = "error: " + e.message; }
     }
 
     // categories
