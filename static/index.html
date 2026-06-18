@@ -139,8 +139,17 @@
   <script src="/static/marked.min.js"></script>
   <script>
     const PALETTE = ["#60a5fa","#34d399","#c084fc","#f59e0b","#f472b6","#eab308","#22d3ee","#fb923c","#a78bfa","#4ade80","#f87171","#38bdf8","#facc15","#2dd4bf"];
-    const groupColor = {}; let categories = [];
-    function assignColors(groups){ groups.forEach((g,i)=>{ if(!(g in groupColor)) groupColor[g] = PALETTE[Object.keys(groupColor).length % PALETTE.length]; }); }
+    const groupColor = {}; let categories = [], categoryColors = {};
+    function assignColors(groups){
+      // pinned colours first (CATEGORY_COLORS), then palette for the rest, skipping used hues —
+      // so a category's colour is stable no matter what else exists.
+      for(const g in categoryColors){ if(categoryColors[g]) groupColor[g] = categoryColors[g]; }
+      const used = new Set(Object.values(groupColor)); let pi = 0;
+      groups.forEach(g => { if(!(g in groupColor)){
+        while(pi < PALETTE.length && used.has(PALETTE[pi])) pi++;
+        const c = PALETTE[pi % PALETTE.length]; groupColor[g] = c; used.add(c); pi++;
+      }});
+    }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
     let Graph, fullData = null, curNote = null, curTag = null, curCat = null, allTags = [], nodeTagCat = {};
@@ -433,7 +442,15 @@
       document.getElementById("newcat").value=""; await loadCats(); active.add(n); assignColors([...new Set([...legendGroups(),n])]); buildLegend(legendGroups()); applyFilter(); }
     async function delCat(n){ if(!confirm('Remove category "'+n+'"? (notes are kept)')) return;
       await fetch("/api/categories/"+encodeURIComponent(n),{method:"DELETE"}); await loadCats(); buildLegend(legendGroups()); }
-    function legendGroups(){ const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group)); return [...gs].sort(); }
+    function legendGroups(){
+      const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group));
+      // order: (unresolved) first, then CATEGORY_COLORS key order (fixed), then the rest alphabetically
+      const order = [];
+      if(gs.has("(unresolved)")) order.push("(unresolved)");
+      for(const k in categoryColors){ if(gs.has(k) && !order.includes(k)) order.push(k); }
+      [...gs].filter(g => !order.includes(g)).sort().forEach(g => order.push(g));
+      return order;
+    }
 
     // search (client-side over node labels)
     function clearSearch(){
@@ -502,6 +519,7 @@
 
     (async () => {
       progSet(8, "Loading categories…");
+      categoryColors = await fetch("/api/config").then(r=>r.json()).then(c=>c.categoryColors||{}).catch(()=>({}));
       await loadCats();
       progSet(24, "Loading tags…");
       allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);

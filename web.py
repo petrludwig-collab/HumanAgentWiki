@@ -10,6 +10,7 @@ Notes are saved as Markdown files under NOTES_DIR; every save is a git commit
 """
 import os
 import re
+import json
 import subprocess
 from contextlib import asynccontextmanager
 
@@ -89,6 +90,21 @@ def safe_md_path(rel):
     if os.path.commonpath([NOTES_DIR, path]) != NOTES_DIR:
         raise HTTPException(400, "path escapes the notes directory")
     return path
+
+
+# Optional fixed colours/order for categories, e.g.
+# CATEGORY_COLORS='{"Books":"#34d399","Notes":"#c084fc"}'. Pins a category's colour (and
+# its legend order) regardless of how many others exist — so adding a category never
+# reshuffles the palette. Empty = colours auto-assigned from the built-in palette.
+try:
+    CATEGORY_COLORS = json.loads(os.environ.get("CATEGORY_COLORS", "{}"))
+except Exception:
+    CATEGORY_COLORS = {}
+
+
+@app.get("/api/config")
+def config():
+    return {"categoryColors": CATEGORY_COLORS}
 
 
 # ---------- categories ----------
