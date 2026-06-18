@@ -156,7 +156,7 @@
       });
     }
     // --- loading progress ---
-    let booted = false, topTimer = null;
+    let booted = false, topTimer = null, filterTimer = null;
     function progSet(pct, txt){
       const f = document.getElementById("boot-fill"); if(f) f.style.width = pct + "%";
       if(txt){ const t = document.getElementById("boot-txt"); if(t) t.textContent = txt; }
@@ -172,12 +172,14 @@
       clearTimeout(topTimer);
       t.style.transition = "none"; t.style.width = "0"; t.style.opacity = "1";
       void t.offsetWidth;                        // reflow so the next transition animates
-      t.style.transition = "width .45s ease, opacity .3s ease";
-      t.style.width = "80%";
+      t.style.transition = "width 1.8s ease, opacity .3s ease";
+      t.style.width = "88%";                     // creep toward the end while the layout settles
     }
     function topDone(){
       if(!booted) return;
       const t = document.getElementById("topbar"); if(!t) return;
+      clearTimeout(filterTimer);
+      t.style.transition = "width .25s ease, opacity .3s ease";
       t.style.width = "100%";
       topTimer = setTimeout(()=>{ t.style.opacity = "0"; t.style.width = "0"; }, 250);
     }
@@ -225,7 +227,8 @@
       Graph.graphData({nodes, links});
       rebuildMapLabels();
       document.getElementById("stats").innerHTML = `${nodes.length} nodes · ${links.length} links <span id="fps"></span>`;
-      requestAnimationFrame(()=>requestAnimationFrame(topDone));   // finish after the relayout paints
+      // keep the bar running until the layout actually settles (onEngineStop); fallback in case it doesn't fire
+      clearTimeout(filterTimer); filterTimer = setTimeout(topDone, 4000);
     }
 
     function focusNode(n){ if(!n||n.x==null) return; const dist=120, r=1+dist/Math.hypot(n.x,n.y,n.z||1); Graph.cameraPosition({x:n.x*r,y:n.y*r,z:(n.z||1)*r}, n, 800); }
@@ -526,7 +529,8 @@
           closeNote(); refreshStyles();
         })
         .onNodeDrag(()=>{ if(!dragReheated){ dragReheated=true; Graph.d3ReheatSimulation(); } })
-        .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; });
+        .onNodeDragEnd(n=>{ dragReheated=false; n.fx=n.fy=n.fz=undefined; })
+        .onEngineStop(()=>{ topDone(); });   // finish the filter progress bar once the layout settles
       Graph.d3Force("charge").strength(-60);
       progSet(80, "Rendering…");
       applyFilter();
