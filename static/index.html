@@ -161,13 +161,14 @@
       });
     }
     // --- loading progress (full-screen overlay, used both on boot and on filter change) ---
-    let booted = false, overlayTimer = null, overlayStartedAt = 0;
+    let booted = false, overlayTimer = null, hideTimer = null, overlayStartedAt = 0;
     function progSet(pct, txt){                  // bar is indeterminate (CSS); just update the status text
       if(txt){ const t = document.getElementById("boot-txt"); if(t) t.textContent = txt; }
     }
     function overlayShow(txt){                    // re-show the full-screen loader (filter changes)
       if(!booted) return;                         // initial boot shows it via markup
       const b = document.getElementById("bootscreen"); if(!b) return;
+      clearTimeout(hideTimer); clearTimeout(overlayTimer);   // cancel any pending hide from a previous cycle
       overlayStartedAt = performance.now();
       b.style.display = "flex"; b.classList.remove("hide");
       const t = document.getElementById("boot-txt"); if(t && txt) t.textContent = txt;
@@ -177,7 +178,7 @@
       const elapsed = performance.now() - overlayStartedAt, MIN = 500;
       if(booted && elapsed < MIN){ clearTimeout(overlayTimer); overlayTimer = setTimeout(overlayHide, MIN - elapsed); return; }
       clearTimeout(overlayTimer);
-      b.classList.add("hide"); setTimeout(()=>{ b.style.display = "none"; }, 550);
+      b.classList.add("hide"); hideTimer = setTimeout(()=>{ b.style.display = "none"; }, 550);
       booted = true;
     }
     const active = new Set(), nodeById = {}, nodeByTitle = {}, nodeBySlug = {};
