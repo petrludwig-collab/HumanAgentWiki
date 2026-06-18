@@ -302,6 +302,61 @@ def save_note(n: NoteIn):
     return {"ok": True, "file": rel}
 
 
+@app.delete("/api/note")
+def delete_note(file: str):
+    path = safe_md_path(file)
+    if os.path.exists(path):
+        os.remove(path)
+    conn = connect()
+    conn.execute("DELETE FROM chunks WHERE file = %s", (file,))
+    conn.execute("DELETE FROM files  WHERE file = %s", (file,))
+    conn.close()
+    _git("add", "-A")
+    _git("commit", "-m", f"delete: {file}")
+    return {"ok": True}
+
+
+@app.delete("/api/tag")
+def delete_tag(name: str):
+    """Remove a tag from every note that carries it (rewrite frontmatter), reindex those
+    files, and drop any node-tag promotion. Notes themselves are kept."""
+    name = name.strip()
+    conn = connect(); cur = conn.cursor()
+    cur.execute("SELECT DISTINCT file FROM chunks WHERE %s = ANY(tags)", (name,))
+    rels = [r[0] for r in cur.fetchall()]
+    changed = []
+    tag_re = re.compile(r'^tags:\s*\[(.*)\]\s*$', re.M)
+    for rel in rels:
+        path = safe_md_path(rel)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            s = f.read()
+        m = tag_re.search(s)
+        if not m:
+            continue
+        items = [x.strip() for x in m.group(1).split(",") if x.strip()]
+        if name not in items:
+            continue
+        items = [x for x in items if x != name]
+        s2 = s[:m.start()] + "tags: [" + ", ".join(items) + "]" + s[m.end():]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(s2)
+        changed.append(path)
+    conn.execute("DELETE FROM node_tags WHERE tag = %s", (name,))
+    if changed:
+        index.reindex_files(cur, changed)
+        for path in changed:
+            r = os.path.relpath(path, NOTES_DIR)
+            cur.execute("""INSERT INTO files (file, hash, updated_at) VALUES (%s, %s, now())
+                           ON CONFLICT (file) DO UPDATE SET hash = EXCLUDED.hash, updated_at = now()""",
+                        (r, index.file_hash(path)))
+        _git("add", "-A")
+        _git("commit", "-m", f"delete tag: {name} ({len(changed)} notes)")
+    conn.close()
+    return {"ok": True, "files": len(changed)}
+
+
 # ---------- graph ----------
 @app.get("/api/graph")
 def graph():

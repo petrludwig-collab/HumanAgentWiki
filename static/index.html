@@ -107,6 +107,8 @@
     #note textarea#edit-area { width: 100%; box-sizing: border-box; min-height: 46vh; background: #0b0f1a; color: #e2e8f0; border: 1px solid #1e293b; border-radius: 8px; padding: 10px; font: 13px/1.55 ui-monospace, SFMono-Regular, monospace; resize: vertical; }
     #note .edit-actions { margin-top: 8px; display: flex; align-items: center; gap: 10px; }
     #note .edit-actions #edit-status { color: #94a3b8; font-size: 12px; }
+    #note .edit-actions .btn.del { margin-left: auto; background: #3f1d1d; color: #fca5a5; border-color: #7f1d1d; }
+    #note .edit-actions .btn.del:hover { background: #dc2626; color: #fff; }
     #note-backlinks { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 12px; }
     #note-backlinks h3 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
     #note-backlinks .bl { display: block; color: #c084fc; cursor: pointer; font-size: 13px; padding: 2px 0; }
@@ -426,9 +428,22 @@
         '<div class="field"><label>Category</label><select class="f" id="tag-cat">'
         + cats.map(c=>`<option${c===curCat?" selected":""}>${esc(c)}</option>`).join("") + '</select></div>'
         + '<div class="field"><label style="cursor:pointer"><input type="checkbox" id="tag-isnode" '+(isNode?"checked":"")+'> Tag is also a node (links all its records)</label></div>'
-        + '<div class="edit-actions"><button class="btn blue" id="tag-save">💾 Save</button><button class="btn" id="tag-cancel">Cancel</button><span id="edit-status"></span></div>';
+        + '<div class="edit-actions"><button class="btn blue" id="tag-save">💾 Save</button><button class="btn" id="tag-cancel">Cancel</button><button class="btn del" id="tag-delete">🗑 Smazat tag</button><span id="edit-status"></span></div>';
       document.getElementById("tag-cancel").onclick = () => openTag(name);
       document.getElementById("tag-save").onclick = () => saveTag(name);
+      document.getElementById("tag-delete").onclick = () => showConfirm(
+        "Smazat tag „" + name + "“?",
+        "Tag se odebere ze VŠECH záznamů, které ho mají. Záznamy samotné zůstanou. Tohle nejde vrátit jedním klikem.",
+        () => deleteTag(name));
+    }
+    async function deleteTag(name){
+      const st = document.getElementById("edit-status"); if(st) st.textContent = "mažu…";
+      try {
+        const r = await fetch("/api/tag?name=" + encodeURIComponent(name), {method:"DELETE"}).then(r=>r.json());
+        await refreshNodeTags(); await reloadGraph();
+        buildLegend(legendGroups()); applyFilter();
+        closeNote();
+      } catch(e){ if(st) st.textContent = "chyba: " + e.message; }
     }
     async function saveTag(name){
       const isNode = document.getElementById("tag-isnode").checked;
@@ -473,13 +488,19 @@
         '<div class="field"><label>Title</label><input class="f" id="edit-title"></div>'
       + '<div class="field"><label>Category</label><select class="f" id="edit-cat">'+catOptions(curNote.category)+'</select></div>'
       + '<div class="field"><label>Text - type [[ to link other notes</label><textarea id="edit-area" spellcheck="false"></textarea></div>'
-      + '<div class="edit-actions"><button class="btn blue" id="edit-save">💾 Save</button><button class="btn" id="edit-cancel">Cancel</button><span id="edit-status"></span></div>';
+      + '<div class="edit-actions"><button class="btn blue" id="edit-save">💾 Save</button><button class="btn" id="edit-cancel">Cancel</button>'
+      + (curNote.id ? '<button class="btn del" id="edit-delete">🗑 Smazat</button>' : '')
+      + '<span id="edit-status"></span></div>';
       document.getElementById("edit-title").value = curNote.title || "";
       document.getElementById("edit-area").value = curNote.body || "";
       document.getElementById("note-title").textContent = curNote.id ? "Edit note" : "New note";
       const ta = document.getElementById("edit-area"); wireAutocomplete(ta); ta.focus();
       document.getElementById("edit-cancel").onclick = () => curNote.id ? openNote(curNote.id, false) : closeNote();
       document.getElementById("edit-save").onclick = saveEdit;
+      if(curNote.id){ document.getElementById("edit-delete").onclick = () => showConfirm(
+        "Smazat záznam „" + (curNote.title||curNote.id) + "“?",
+        "Soubor se smaže z Mozku i z disku (git commit). Tohle nejde vrátit jedním klikem.",
+        () => deleteNote(curNote.id)); }
       ta.onkeydown = e => { if((e.metaKey||e.ctrlKey)&&e.key==="Enter") saveEdit(); };
     }
     async function saveEdit(){
@@ -494,6 +515,14 @@
         if(r.ok){ document.getElementById("note-backlinks").style.display=""; await reloadGraph(); await openNote(r.file, false); }
         else st.textContent = "error: " + (r.detail||"not saved");
       } catch(e){ st.textContent = "error: " + e.message; }
+    }
+    async function deleteNote(file){
+      const st = document.getElementById("edit-status"); if(st) st.textContent = "mažu…";
+      try {
+        await fetch("/api/note?file=" + encodeURIComponent(file), {method:"DELETE"});
+        document.getElementById("note-backlinks").style.display = "";
+        await reloadGraph(); applyFilter(); closeNote();
+      } catch(e){ if(st) st.textContent = "chyba: " + e.message; }
     }
 
     // categories
