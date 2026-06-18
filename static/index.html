@@ -156,7 +156,7 @@
       });
     }
     // --- loading progress ---
-    let booted = false, topTimer = null, filterTimer = null;
+    let booted = false, topTimer = null, filterTimer = null, topStartedAt = 0;
     function progSet(pct, txt){
       const f = document.getElementById("boot-fill"); if(f) f.style.width = pct + "%";
       if(txt){ const t = document.getElementById("boot-txt"); if(t) t.textContent = txt; }
@@ -170,6 +170,7 @@
       if(!booted) return;                       // skip during initial boot (bootscreen covers it)
       const t = document.getElementById("topbar"); if(!t) return;
       clearTimeout(topTimer);
+      topStartedAt = performance.now();
       t.style.transition = "none"; t.style.width = "0"; t.style.opacity = "1";
       void t.offsetWidth;                        // reflow so the next transition animates
       t.style.transition = "width 1.8s ease, opacity .3s ease";
@@ -178,6 +179,8 @@
     function topDone(){
       if(!booted) return;
       const t = document.getElementById("topbar"); if(!t) return;
+      const elapsed = performance.now() - topStartedAt, MIN = 600;
+      if(elapsed < MIN){ clearTimeout(filterTimer); filterTimer = setTimeout(topDone, MIN - elapsed); return; }
       clearTimeout(filterTimer);
       t.style.transition = "width .25s ease, opacity .3s ease";
       t.style.width = "100%";
