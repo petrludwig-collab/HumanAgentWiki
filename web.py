@@ -73,6 +73,9 @@ def ensure_setup():
     conn.execute("CREATE TABLE IF NOT EXISTS node_tags "
                  "(tag text PRIMARY KEY, category text, created_at timestamptz DEFAULT now())")
     conn.execute("ALTER TABLE node_tags ADD COLUMN IF NOT EXISTS category text")
+    conn.execute("CREATE TABLE IF NOT EXISTS category_meta "
+                 "(name text PRIMARY KEY, color text, sort_order double precision, "
+                 " updated_at timestamptz DEFAULT now())")
     conn.close()
 
 
@@ -104,7 +107,50 @@ except Exception:
 
 @app.get("/api/config")
 def config():
-    return {"categoryColors": CATEGORY_COLORS}
+    # Colours/order: env CATEGORY_COLORS as defaults, overridden by anything edited in the UI
+    # (persisted in category_meta). Order = saved sort_order, else env key order.
+    colors = dict(CATEGORY_COLORS)
+    order = list(CATEGORY_COLORS.keys())
+    conn = connect(); cur = conn.cursor()
+    cur.execute("SELECT name, color, sort_order FROM category_meta")
+    rows = cur.fetchall(); conn.close()
+    ordered = sorted([r for r in rows if r[2] is not None], key=lambda r: r[2])
+    for name, color, _ in rows:
+        if color:
+            colors[name] = color
+    if ordered:
+        order = [r[0] for r in ordered]
+    return {"categoryColors": colors, "categoryOrder": order}
+
+
+class CategoryMeta(BaseModel):
+    name: str
+    color: str | None = None
+
+
+@app.post("/api/category-meta")
+def set_category_meta(m: CategoryMeta):
+    conn = connect()
+    conn.execute("INSERT INTO category_meta (name, color) VALUES (%s, %s) "
+                 "ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color, updated_at = now()",
+                 (m.name.strip(), m.color))
+    conn.close()
+    return {"ok": True}
+
+
+class CategoryOrder(BaseModel):
+    order: list[str]
+
+
+@app.post("/api/category-order")
+def set_category_order(o: CategoryOrder):
+    conn = connect()
+    for i, name in enumerate(o.order):
+        conn.execute("INSERT INTO category_meta (name, sort_order) VALUES (%s, %s) "
+                     "ON CONFLICT (name) DO UPDATE SET sort_order = EXCLUDED.sort_order, updated_at = now()",
+                     (name.strip(), float(i)))
+    conn.close()
+    return {"ok": True}
 
 
 # ---------- categories ----------
@@ -283,12 +329,22 @@ def graph():
                          "tags": r["tags"] or [], "val": 16 if r["node_type"] == "hub" else 0.7}
              for r in base}
     # categories are nodes too: one hub per category; every note links to it.
-    for c in sorted({r["category"] for r in base}):
+    cats = sorted({r["category"] for r in base})
+    for c in cats:
         nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 54, "is_cat": True}
+    # A wikilink to a category (its label, its raw folder name, or a slug of either) should
+    # point at that category node — not spawn a duplicate empty node. e.g. [[longevity]] -> cat:Longevity.
+    cat_key = {}
+    for c in cats:
+        cat_key[c] = "cat:" + c; cat_key[slug(c)] = "cat:" + c
+    for raw, label in getattr(index, "CATEGORY_LABELS", {}).items():
+        if "cat:" + label in nodes:
+            for k in (raw, label, slug(raw), slug(label)):
+                cat_key[k] = "cat:" + label
     links = [{"source": r["file"], "target": "cat:" + r["category"]} for r in base]
     for src, targets in links_by_file.items():
         for t in targets:
-            dst = title_to_file.get(t) or slug_to_file.get(slug(t))
+            dst = title_to_file.get(t) or slug_to_file.get(slug(t)) or cat_key.get(t) or cat_key.get(slug(t))
             if dst is None:                       # link to a note that doesn't exist (yet)
                 dst = "ext:" + t
                 nodes.setdefault(dst, {"id": dst, "label": t, "group": "(unresolved)", "val": 0.7})

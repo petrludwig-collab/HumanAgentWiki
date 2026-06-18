@@ -63,6 +63,18 @@
     #boot-txt { font-size: 12px; color: #64748b; min-height: 14px; }
     #topbar { position: fixed; top: 0; left: 0; height: 3px; width: 0; z-index: 60;
               background: linear-gradient(90deg,#60a5fa,#c084fc); box-shadow: 0 0 8px #60a5fa; opacity: 0; }
+    .leg .drag { cursor: grab; color: #475569; margin-right: 4px; font-size: 12px; }
+    .leg.dragging { opacity: .4; }
+    .leg.dragover { box-shadow: inset 0 2px 0 #5b8cff; }
+    .leg input.cocol { width: 14px; height: 14px; border: none; background: none; padding: 0; margin-right: 7px; cursor: pointer; border-radius: 3px; }
+    #confirm { position: fixed; inset: 0; z-index: 70; background: rgba(2,6,23,.72); display: none; align-items: center; justify-content: center; }
+    #confirm.show { display: flex; }
+    #confirm .box2 { background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 26px 28px; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    #confirm h3 { margin: 0 0 10px; color: #f87171; font-size: 17px; }
+    #confirm p { color: #cbd5e1; font-size: 13px; line-height: 1.5; margin: 0 0 20px; }
+    #confirm .btns { display: flex; gap: 10px; justify-content: center; }
+    #confirm .btn.danger { background: #dc2626; color: #fff; border-color: #dc2626; font-weight: 600; }
+    #confirm .btn.cancel { background: #1e293b; color: #e5e7eb; }
     .map-label { position: absolute; transform: translate(-50%, -165%); white-space: nowrap; font-size: 11px; font-weight: 600; color: #f1f5f9; text-shadow: 0 1px 3px #000, 0 0 6px #000; pointer-events: none; }
     #note { position: fixed; top: 0; right: 0; z-index: 20; width: 380px; max-width: 90vw; height: 100vh; background: rgba(15,23,42,.96); border-left: 1px solid #1e293b; padding: 18px 20px; overflow-y: auto; transform: translateX(100%); transition: transform .2s ease; backdrop-filter: blur(8px); box-sizing: border-box; }
     #note.open { transform: translateX(0); }
@@ -105,6 +117,13 @@
 </head>
 <body>
   <div id="topbar"></div>
+  <div id="confirm">
+    <div class="box2">
+      <h3></h3>
+      <p></p>
+      <div class="btns"><button class="btn cancel">Zrušit</button><button class="btn danger">Smazat</button></div>
+    </div>
+  </div>
   <div id="bootscreen">
     <div class="logo">🧠 HumanAgentWiki</div>
     <div id="boot-track"><div id="boot-fill"></div></div>
@@ -139,7 +158,7 @@
   <script src="/static/marked.min.js"></script>
   <script>
     const PALETTE = ["#60a5fa","#34d399","#c084fc","#f59e0b","#f472b6","#eab308","#22d3ee","#fb923c","#a78bfa","#4ade80","#f87171","#38bdf8","#facc15","#2dd4bf"];
-    const groupColor = {}; let categories = [], categoryColors = {};
+    const groupColor = {}; let categories = [], categoryColors = {}, categoryOrder = [];
     function assignColors(groups){
       // pinned colours first (CATEGORY_COLORS), then palette for the rest, skipping used hues —
       // so a category's colour is stable no matter what else exists.
@@ -210,20 +229,62 @@
     let editingCats = false;
     function buildLegend(groups){
       const el = document.getElementById("legend");
+      const ed = editingCats;
       el.innerHTML = groups.map(g => {
-        const on = active.has(g);
-        return `<div class="leg${on?"":" off"}" data-g="${g}"><span class="box">${on?"☑":"☐"}</span><span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span><span class="lname">${g}</span>${editingCats?`<span class="x" data-del="${g}" title="Remove category">−</span>`:""}</div>`;
+        const on = active.has(g), real = g !== "(unresolved)";
+        const handle = (ed && real) ? `<span class="drag" title="Přetáhni pro změnu pořadí">⠿</span>` : (ed ? `<span class="drag" style="visibility:hidden">⠿</span>` : "");
+        const swatch = (ed && real)
+          ? `<input type="color" class="cocol" value="${groupColor[g]||"#94a3b8"}" data-color="${g}" title="Změnit barvu">`
+          : `<span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span>`;
+        const del = (ed && real) ? `<span class="x" data-del="${g}" title="Smazat kategorii">−</span>` : "";
+        return `<div class="leg${on?"":" off"}" data-g="${g}" ${ed&&real?'draggable="true"':''}>${handle}<span class="box">${on?"☑":"☐"}</span>${swatch}<span class="lname">${g}</span>${del}</div>`;
       }).join("")
-      + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span> · <span class="ctl-link" id="leg-edit">${editingCats?"done":"edit"}</span></div>`
-      + (editingCats ? `<div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()"><button class="btn" onclick="addCat()">+</button></div>` : "");
-      el.querySelectorAll(".leg").forEach(d => d.onclick = e => {
-        if(e.target.dataset.del){ delCat(e.target.dataset.del); return; }
-        if(editingCats) return;                       // edit mode: row click doesn't toggle the filter
-        const g = d.dataset.g; active.has(g)?active.delete(g):active.add(g); buildLegend(groups); applyFilter(); saveState({active:[...active], knownGroups: groups});
+      + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span> · <span class="ctl-link" id="leg-edit">${ed?"done":"edit"}</span></div>`
+      + (ed ? `<div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()"><button class="btn" onclick="addCat()">+</button></div>` : "");
+
+      el.querySelectorAll(".cocol").forEach(inp => inp.onchange = e => { e.stopPropagation(); changeColor(inp.dataset.color, inp.value); });
+      el.querySelectorAll(".leg").forEach(d => {
+        d.onclick = e => {
+          if(e.target.dataset.del){ confirmDelCat(e.target.dataset.del); return; }
+          if(ed) return;                              // edit mode: row click doesn't toggle / colour input handles itself
+          const g = d.dataset.g; active.has(g)?active.delete(g):active.add(g); buildLegend(groups); applyFilter(); saveState({active:[...active], knownGroups: groups});
+        };
+        if(ed && d.getAttribute("draggable")==="true") wireDrag(d);
       });
       document.getElementById("leg-all").onclick = () => { groups.forEach(g=>active.add(g)); buildLegend(groups); applyFilter(); saveState({active:[...active], knownGroups: groups}); };
       document.getElementById("leg-none").onclick = () => { active.clear(); buildLegend(groups); applyFilter(); saveState({active:[...active], knownGroups: groups}); };
-      document.getElementById("leg-edit").onclick = () => { editingCats = !editingCats; buildLegend(groups); };
+      document.getElementById("leg-edit").onclick = () => { editingCats = !editingCats; buildLegend(legendGroups()); };
+    }
+    // change a category colour: pin it, persist, recolour the graph
+    async function changeColor(g, color){
+      categoryColors[g] = color; groupColor[g] = color;
+      refreshStyles();
+      buildLegend(legendGroups());
+      await fetch("/api/category-meta", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:g, color})}).catch(()=>{});
+    }
+    // drag-to-reorder categories in the legend
+    let dragSrc = null;
+    function wireDrag(d){
+      d.addEventListener("dragstart", e => { dragSrc = d.dataset.g; d.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; });
+      d.addEventListener("dragend", () => { dragSrc = null; d.classList.remove("dragging"); document.querySelectorAll(".leg.dragover").forEach(x=>x.classList.remove("dragover")); });
+      d.addEventListener("dragover", e => { e.preventDefault(); d.classList.add("dragover"); });
+      d.addEventListener("dragleave", () => d.classList.remove("dragover"));
+      d.addEventListener("drop", e => { e.preventDefault(); d.classList.remove("dragover"); reorderCat(dragSrc, d.dataset.g); });
+    }
+    async function reorderCat(src, dst){
+      if(!src || src===dst) return;
+      const reals = legendGroups().filter(g => g !== "(unresolved)");
+      const from = reals.indexOf(src), to = reals.indexOf(dst);
+      if(from<0||to<0) return;
+      reals.splice(to, 0, reals.splice(from,1)[0]);
+      categoryOrder = reals;
+      buildLegend(legendGroups());
+      await fetch("/api/category-order", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({order: reals})}).catch(()=>{});
+    }
+    function confirmDelCat(n){
+      showConfirm("Smazat kategorii „" + n + "“?",
+        "Kategorie zmizí z legendy. Samotné poznámky/soubory zůstanou zachované.",
+        () => delCat(n));
     }
     function doApplyFilter(){
       const nodes = fullData.nodes.filter(n=>active.has(n.group));
@@ -440,14 +501,25 @@
     async function addCat(){ const n = document.getElementById("newcat").value.trim(); if(!n) return;
       await fetch("/api/categories",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n})});
       document.getElementById("newcat").value=""; await loadCats(); active.add(n); assignColors([...new Set([...legendGroups(),n])]); buildLegend(legendGroups()); applyFilter(); }
-    async function delCat(n){ if(!confirm('Remove category "'+n+'"? (notes are kept)')) return;
+    async function delCat(n){   // confirmation handled by confirmDelCat's modal
       await fetch("/api/categories/"+encodeURIComponent(n),{method:"DELETE"}); await loadCats(); buildLegend(legendGroups()); }
+    // big, explicit confirmation modal
+    function showConfirm(title, msg, onYes){
+      let m = document.getElementById("confirm");
+      m.querySelector("h3").textContent = title;
+      m.querySelector("p").textContent = msg;
+      m.classList.add("show");
+      const yes = m.querySelector(".danger"), no = m.querySelector(".cancel");
+      const close = () => { m.classList.remove("show"); yes.onclick = no.onclick = null; };
+      yes.onclick = () => { close(); onYes(); };
+      no.onclick = close;
+    }
     function legendGroups(){
       const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group));
       // order: (unresolved) first, then CATEGORY_COLORS key order (fixed), then the rest alphabetically
       const order = [];
       if(gs.has("(unresolved)")) order.push("(unresolved)");
-      for(const k in categoryColors){ if(gs.has(k) && !order.includes(k)) order.push(k); }
+      for(const k of categoryOrder){ if(gs.has(k) && !order.includes(k)) order.push(k); }
       [...gs].filter(g => !order.includes(g)).sort().forEach(g => order.push(g));
       return order;
     }
@@ -519,7 +591,8 @@
 
     (async () => {
       progSet(8, "Loading categories…");
-      categoryColors = await fetch("/api/config").then(r=>r.json()).then(c=>c.categoryColors||{}).catch(()=>({}));
+      { const cfg = await fetch("/api/config").then(r=>r.json()).catch(()=>({}));
+        categoryColors = cfg.categoryColors || {}; categoryOrder = cfg.categoryOrder || []; }
       await loadCats();
       progSet(24, "Loading tags…");
       allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);
