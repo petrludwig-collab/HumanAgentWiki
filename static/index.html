@@ -680,14 +680,14 @@
       const nf = n => (n||0).toLocaleString("en-US");
       const row = (icon,val,lbl) => `<div>${icon} <span class="sv">${nf(val)}</span></div><div class="sl">${lbl}</div>`;
       grid.innerHTML =
-        row("📄", s.notes, "notes")
+        row("📁", s.categories, "categories")
+      + row("🏷", s.node_tags, "node-tags")
+      + row("🏷", s.tags, "tags")
+      + row("📄", s.notes, "notes")
+      + row("🔗", s.wikilinks, "links")
       + row("📝", s.words, "words")
       + row("🔤", s.characters, "characters")
       + `<div>📚 <span class="sv">≈ ${nf(s.pages)}</span></div><div class="sl">standard pages</div>`
-      + row("📁", s.categories, "categories")
-      + row("🏷", s.node_tags, "node-tags")
-      + row("🏷", s.tags, "tags")
-      + row("🔗", s.wikilinks, "links")
       + (s.biggest ? `<div class="full">🏆 top category: <span class="sv">${esc(s.biggest.name)}</span> <span class="sl">(${nf(s.biggest.count)})</span></div>` : "");
     }
     function closeStatsModal(){ const m=document.getElementById("statsmodal"); if(m) m.classList.remove("show"); }
