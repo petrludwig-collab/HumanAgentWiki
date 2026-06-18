@@ -231,8 +231,9 @@
       // blocks the main thread (re-adding a big category) — otherwise the bar never renders.
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         doApplyFilter();
-        // keep the overlay up until the layout actually settles (onEngineStop); fallback if it doesn't fire
-        clearTimeout(overlayTimer); overlayTimer = setTimeout(overlayHide, 4000);
+        // Nodes keep their positions across filters, so the view re-settles visually fast.
+        // Hide after a short, animated window instead of waiting for the sim to fully cool (~5s).
+        clearTimeout(overlayTimer); overlayTimer = setTimeout(overlayHide, 1000);
       }));
     }
 
