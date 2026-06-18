@@ -568,8 +568,11 @@
       cb.checked=labelsOn; cb.addEventListener("change", e=>{ labelsOn=e.target.checked; saveState({labels:labelsOn}); if(labelsOn) updateLabels(); else mapLabels.forEach(({el})=>el.style.display="none"); });
       if(labelsOn) updateLabels();
 
-      progSet(100, "Ready");
       setTimeout(overlayHide, 600);   // let the layout settle a moment before revealing
+      // After the initial (nicely warmed) layout, drop synchronous warmup so later filter
+      // re-layouts don't block the main thread — the loader animation then stays smooth and
+      // the graph settles over rendered frames instead of one big freeze.
+      setTimeout(()=>{ if(Graph) Graph.warmupTicks(0); }, 1300);
 
       // camera persistence
       if(saved.cam) setTimeout(()=>{ try{ Graph.cameraPosition({x:saved.cam.x,y:saved.cam.y,z:saved.cam.z},{x:saved.cam.tx,y:saved.cam.ty,z:saved.cam.tz},0);}catch(e){} }, 80);
