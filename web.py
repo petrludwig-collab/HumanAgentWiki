@@ -133,13 +133,12 @@ def stats():
     chars, words = cur.fetchone()
     cur.execute("SELECT count(DISTINCT t) FROM chunks CROSS JOIN LATERAL unnest(tags) AS t"); tags = cur.fetchone()[0]
     cur.execute("SELECT count(*) FROM node_tags"); node_tags = cur.fetchone()[0]
-    cur.execute("SELECT count(DISTINCT file) FROM chunks WHERE 'Predikce' = ANY(tags)"); preds = cur.fetchone()[0]
     cur.execute("SELECT count(*) FROM (SELECT file, unnest(links) FROM chunks) x"); wikilinks = cur.fetchone()[0]
     cur.execute("SELECT category, count(DISTINCT file) c FROM chunks GROUP BY category ORDER BY c DESC LIMIT 1")
     big = cur.fetchone()
     conn.close()
     return {"notes": notes, "categories": cats, "characters": int(chars), "words": int(words),
-            "tags": tags, "node_tags": node_tags, "predictions": preds, "wikilinks": wikilinks,
+            "tags": tags, "node_tags": node_tags, "wikilinks": wikilinks,
             "pages": round(chars / 1800), "biggest": {"name": big[0], "count": big[1]} if big else None}
 
 

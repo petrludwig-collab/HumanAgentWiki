@@ -46,10 +46,15 @@
     .btn.blue { background: #2563eb; border-color: #2563eb; }
     #newnote { width: 100%; margin-top: 8px; }
     #stats { color: #94a3b8; margin-top: 8px; font-size: 12px; } #fps { color: #475569; }
-    #statsbox { margin-top: 6px; border-top: 1px solid #1e293b; padding-top: 7px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 11.5px; }
-    #statsbox .sv { color: #e5e7eb; font-weight: 600; }
-    #statsbox .sl { color: #64748b; }
-    #statsbox .full { grid-column: 1 / -1; color: #94a3b8; }
+    #statsmodal { position: fixed; inset: 0; z-index: 70; background: rgba(2,6,23,.72); display: none; align-items: center; justify-content: center; }
+    #statsmodal.show { display: flex; }
+    #statsmodal .box2 { position: relative; background: #0f172a; border: 1px solid #334155; border-radius: 14px; padding: 22px 26px; min-width: 320px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    #statsmodal h3 { margin: 0 0 14px; font-size: 16px; color: #e5e7eb; }
+    #statsmodal .close { position: absolute; top: 12px; right: 14px; cursor: pointer; color: #94a3b8; font-size: 20px; border: none; background: none; }
+    #statsmodal .grid { display: grid; grid-template-columns: auto auto; gap: 8px 22px; font-size: 13px; }
+    #statsmodal .grid .sv { color: #e5e7eb; font-weight: 700; }
+    #statsmodal .grid .sl { color: #94a3b8; }
+    #statsmodal .grid .full { grid-column: 1 / -1; border-top: 1px solid #1e293b; padding-top: 8px; margin-top: 2px; color: #94a3b8; }
     #lblToggle { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 12px; color: #cbd5e1; cursor: pointer; user-select: none; }
     #lblToggle input { accent-color: #60a5fa; cursor: pointer; }
     #maplabels { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
@@ -139,6 +144,13 @@
       <div class="btns"><button class="btn cancel">Cancel</button><button class="btn danger">Delete</button></div>
     </div>
   </div>
+  <div id="statsmodal">
+    <div class="box2">
+      <button class="close" onclick="closeStatsModal()">×</button>
+      <h3>📊 Stats</h3>
+      <div class="grid"></div>
+    </div>
+  </div>
   <div id="bootscreen">
     <div class="logo">🧠 HumanAgentWiki</div>
     <div id="boot-track"><div id="boot-fill"></div></div>
@@ -155,7 +167,6 @@
     <button class="btn blue" id="newnote" onclick="newNote()">+ New note</button>
     <label id="lblToggle"><input type="checkbox" id="showLabels" checked /> Show main labels</label>
     <div id="stats">loading...</div>
-    <div id="statsbox"></div>
   </div>
   <div id="maplabels"></div>
   <div id="graph"></div>
@@ -308,7 +319,7 @@
       const links = fullData.links.filter(l => { const s=(l.source&&l.source.id)||l.source, t=(l.target&&l.target.id)||l.target; return ids.has(s)&&ids.has(t); });
       Graph.graphData({nodes, links});
       rebuildMapLabels();
-      document.getElementById("stats").innerHTML = `${nodes.length} nodes · ${links.length} links <span id="fps"></span>`;
+      document.getElementById("stats").innerHTML = `${nodes.length} nodes · ${links.length} links · <span class="ctl-link" onclick="openStatsModal()">Stats</span><span id="fps"></span>`;
     }
     function applyFilter(){
       if(!fullData||!Graph) return;
@@ -657,21 +668,27 @@
     });
     function acPick(i){ const ta=acTA, pos=ta.selectionStart; ta.value = ta.value.slice(0,pos).replace(/\[\[([^\]]*)$/,"[["+acItems[i]+"]]")+ta.value.slice(pos); document.getElementById("ac").style.display="none"; ta.focus(); }
 
-    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); rebuildMapLabels(); buildLegend(legendGroups()); loadStats(); }
-    async function loadStats(){
+    async function reloadGraph(){ const data = await fetch("/api/graph").then(r=>r.json()); ingest(data); Graph.graphData({nodes: data.nodes.filter(n=>active.has(n.group)), links: data.links.filter(l=>{const s=(l.source&&l.source.id)||l.source,t=(l.target&&l.target.id)||l.target; const ids=new Set(data.nodes.filter(n=>active.has(n.group)).map(n=>n.id)); return ids.has(s)&&ids.has(t);})}); rebuildMapLabels(); buildLegend(legendGroups()); }
+    async function openStatsModal(){
+      const m = document.getElementById("statsmodal"); if(!m) return;
+      const grid = m.querySelector(".grid"); grid.innerHTML = '<div class="full">Loading…</div>';
+      m.classList.add("show");
       const s = await fetch("/api/stats").then(r=>r.json()).catch(()=>null);
-      const box = document.getElementById("statsbox"); if(!box || !s) return;
+      if(!s){ grid.innerHTML = '<div class="full">error</div>'; return; }
       const nf = n => (n||0).toLocaleString("en-US");
-      box.innerHTML =
-        `<div class="full">📄 <span class="sv">${nf(s.notes)}</span> <span class="sl">notes</span> &nbsp; 📝 <span class="sv">${nf(s.words)}</span> <span class="sl">words</span></div>`
-      + `<div class="full">🔤 <span class="sv">${nf(s.characters)}</span> <span class="sl">characters · ≈ ${nf(s.pages)} pages</span></div>`
-      + `<div>📁 <span class="sv">${s.categories}</span> <span class="sl">categories</span></div>`
-      + `<div>🏷 <span class="sv">${nf(s.tags)}</span> <span class="sl">tags</span></div>`
-      + `<div>● <span class="sv">${s.node_tags}</span> <span class="sl">node-tags</span></div>`
-      + `<div>🔮 <span class="sv">${nf(s.predictions)}</span> <span class="sl">predictions</span></div>`
-      + `<div>🔗 <span class="sv">${nf(s.wikilinks)}</span> <span class="sl">links</span></div>`
-      + (s.biggest ? `<div>🏆 <span class="sl">top:</span> <span class="sv">${esc(s.biggest.name)}</span></div>` : "");
+      const row = (icon,val,lbl) => `<div>${icon} <span class="sv">${nf(val)}</span></div><div class="sl">${lbl}</div>`;
+      grid.innerHTML =
+        row("📄", s.notes, "notes")
+      + row("📝", s.words, "words")
+      + row("🔤", s.characters, "characters")
+      + `<div>📚 <span class="sv">≈ ${nf(s.pages)}</span></div><div class="sl">standard pages</div>`
+      + row("📁", s.categories, "categories")
+      + row("🏷", s.tags, "tags")
+      + row("●", s.node_tags, "node-tags")
+      + row("🔗", s.wikilinks, "links")
+      + (s.biggest ? `<div class="full">🏆 top category: <span class="sv">${esc(s.biggest.name)}</span> <span class="sl">(${nf(s.biggest.count)})</span></div>` : "");
     }
+    function closeStatsModal(){ const m=document.getElementById("statsmodal"); if(m) m.classList.remove("show"); }
     function ingest(data){
       fullData = data;
       for(const k in nodeById) delete nodeById[k]; for(const k in nodeByTitle) delete nodeByTitle[k]; for(const k in nodeBySlug) delete nodeBySlug[k];
@@ -754,7 +771,6 @@
       const cb=document.getElementById("showLabels");
       cb.checked=labelsOn; cb.addEventListener("change", e=>{ labelsOn=e.target.checked; saveState({labels:labelsOn}); if(labelsOn) updateLabels(); else mapLabels.forEach(({el})=>el.style.display="none"); });
       if(labelsOn) updateLabels();
-      loadStats();
 
       setTimeout(overlayHide, 600);   // let the layout settle a moment before revealing
       // After the initial (nicely warmed) layout, drop synchronous warmup so later filter
