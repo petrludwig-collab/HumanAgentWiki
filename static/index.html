@@ -134,7 +134,9 @@
       const ns = (Graph.graphData().nodes) || [];
       mapLabels = ns.map(n => {
         const el = document.createElement("div"); el.className = "map-label";
-        el.textContent = (n.label || "").slice(0, 28); el.style.display = "none";
+        const full = n.label || "";
+        el.textContent = full.length > 28 ? full.slice(0, 28).trimEnd() + "…" : full;
+        el.style.display = "none";
         labelLayerEl.appendChild(el); return {n, el};
       });
     }
