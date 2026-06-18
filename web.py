@@ -261,8 +261,10 @@ def graph():
 
     # brains link by slug (filename), not by title - so resolve [[X]] against both.
     slug_to_file = {slug(os.path.splitext(os.path.basename(r["file"]))[0]): r["file"] for r in base}
+    # Level 1 leaves = 0.7; notes flagged `type: hub` in frontmatter become Level 2
+    # hubs (16) — labeled, same size as node-tags. Categories=54, node-tags=16.
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
-                         "tags": r["tags"] or [], "val": 0.7}     # Level 1; categories=54, node-tags=16
+                         "tags": r["tags"] or [], "val": 16 if r["node_type"] == "hub" else 0.7}
              for r in base}
     # categories are nodes too: one hub per category; every note links to it.
     for c in sorted({r["category"] for r in base}):
