@@ -262,6 +262,7 @@ class NoteIn(BaseModel):
     title: str
     text: str
     file: str | None = None
+    tags: list[str] | None = None
 
 
 @app.post("/api/note")
@@ -283,9 +284,13 @@ def save_note(n: NoteIn):
             if end != -1:
                 for line in old[3:end].splitlines():
                     key = line.split(":", 1)[0].strip() if ":" in line else ""
-                    if key and key not in ("title", "category"):
+                    # drop title/category (re-set below); drop tags only if the client sent new ones
+                    if key and key not in ("title", "category") and not (key == "tags" and n.tags is not None):
                         extra.append(line)
-    front = "\n".join([f"title: {title}", f"category: {cat}", *extra])
+    front_lines = [f"title: {title}", f"category: {cat}"]
+    if n.tags is not None:
+        front_lines.append("tags: [" + ", ".join(t.strip() for t in n.tags if t.strip()) + "]")
+    front = "\n".join(front_lines + extra)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(f"---\n{front}\n---\n\n{n.text.strip()}\n")

@@ -109,6 +109,15 @@
     #note .edit-actions #edit-status { color: #94a3b8; font-size: 12px; }
     #note .edit-actions .btn.del { margin-left: auto; background: #3f1d1d; color: #fca5a5; border-color: #7f1d1d; }
     #note .edit-actions .btn.del:hover { background: #dc2626; color: #fff; }
+    #note .tagedit { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; background: #0b0f1a; border: 1px solid #1e293b; border-radius: 8px; padding: 5px 7px; }
+    #note .tagedit .chip { display: inline-flex; align-items: center; gap: 5px; background: #2e1065; color: #e9d5ff; border-radius: 6px; padding: 2px 7px; font-size: 12px; }
+    #note .tagedit .chip .rm { cursor: pointer; color: #c4b5fd; font-weight: 700; }
+    #note .tagedit .chip .rm:hover { color: #fff; }
+    #note .taginput { flex: 1; min-width: 80px; background: none; border: none; color: #e5e7eb; font-size: 12px; outline: none; padding: 2px; }
+    #note .tagsuggest { background: #0f172a; border: 1px solid #334155; border-radius: 8px; margin-top: 3px; max-height: 180px; overflow-y: auto; display: none; }
+    #note .tagsuggest .tsug { padding: 5px 9px; font-size: 12px; color: #cbd5e1; cursor: pointer; }
+    #note .tagsuggest .tsug:hover { background: #1e293b; }
+    #note .tagsuggest .tsug.new { color: #5b8cff; border-top: 1px solid #1e293b; }
     #note-backlinks { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 12px; }
     #note-backlinks h3 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
     #note-backlinks .bl { display: block; color: #c084fc; cursor: pointer; font-size: 13px; padding: 2px 0; }
@@ -173,7 +182,7 @@
     }
     const baseColor = n => groupColor[n.group] || "#94a3b8";
 
-    let Graph, fullData = null, curNote = null, curTag = null, curCat = null, allTags = [], nodeTagCat = {};
+    let Graph, fullData = null, curNote = null, curTag = null, curCat = null, allTags = [], nodeTagCat = {}, editTags = [];
     let mapLabels = [], labelLayerEl = null, labelsOn = true;
     // Rebuild the HTML label overlay from the graph's CURRENT node objects. Must run
     // after every Graph.graphData() swap — otherwise labels keep referencing stale
@@ -487,6 +496,7 @@
       nb.innerHTML =
         '<div class="field"><label>Title</label><input class="f" id="edit-title"></div>'
       + '<div class="field"><label>Category</label><select class="f" id="edit-cat">'+catOptions(curNote.category)+'</select></div>'
+      + '<div class="field"><label>Tags</label><div class="tagedit" id="tagedit"><span id="tag-chips"></span><input id="tag-input" class="taginput" placeholder="add tag…" autocomplete="off"></div><div id="tag-suggest" class="tagsuggest"></div></div>'
       + '<div class="field"><label>Text - type [[ to link other notes</label><textarea id="edit-area" spellcheck="false"></textarea></div>'
       + '<div class="edit-actions"><button class="btn blue" id="edit-save">💾 Save</button><button class="btn" id="edit-cancel">Cancel</button>'
       + (curNote.id ? '<button class="btn del" id="edit-delete">🗑 Delete</button>' : '')
@@ -494,7 +504,8 @@
       document.getElementById("edit-title").value = curNote.title || "";
       document.getElementById("edit-area").value = curNote.body || "";
       document.getElementById("note-title").textContent = curNote.id ? "Edit note" : "New note";
-      const ta = document.getElementById("edit-area"); wireAutocomplete(ta); ta.focus();
+      editTags = (curNote.tags || []).slice(); wireTagEditor();
+      const ta = document.getElementById("edit-area"); wireAutocomplete(ta);
       document.getElementById("edit-cancel").onclick = () => curNote.id ? openNote(curNote.id, false) : closeNote();
       document.getElementById("edit-save").onclick = saveEdit;
       if(curNote.id){ document.getElementById("edit-delete").onclick = () => showConfirm(
@@ -503,15 +514,50 @@
         () => deleteNote(curNote.id)); }
       ta.onkeydown = e => { if((e.metaKey||e.ctrlKey)&&e.key==="Enter") saveEdit(); };
     }
+    // ---- tags editor (chips + autocomplete + create new) ----
+    function renderTagChips(){
+      const c = document.getElementById("tag-chips"); if(!c) return;
+      c.innerHTML = editTags.map(t=>`<span class="chip">${esc(t)}<span class="rm" data-rm="${esc(t)}">×</span></span>`).join("");
+      c.querySelectorAll(".rm").forEach(x => x.onclick = () => removeEditTag(x.dataset.rm));
+    }
+    function addEditTag(t){ t=(t||"").trim(); if(t && !editTags.includes(t)) editTags.push(t);
+      renderTagChips(); const i=document.getElementById("tag-input"); if(i) i.value=""; showTagSuggest(""); }
+    function removeEditTag(t){ editTags = editTags.filter(x=>x!==t); renderTagChips(); }
+    function showTagSuggest(q){
+      const box = document.getElementById("tag-suggest"); if(!box) return;
+      q = (q||"").trim();
+      if(!q){ box.innerHTML=""; box.style.display="none"; return; }
+      const names = allTags.map(t=>t.tag).filter(t=>!editTags.includes(t));
+      const hits = names.filter(t=>t.toLowerCase().includes(q.toLowerCase())).slice(0,8);
+      const exact = names.some(t=>t.toLowerCase()===q.toLowerCase());
+      let html = hits.map(t=>`<div class="tsug" data-add="${esc(t)}">🏷 ${esc(t)}</div>`).join("");
+      if(!exact) html += `<div class="tsug new" data-add="${esc(q)}">+ Create “${esc(q)}”</div>`;
+      box.innerHTML = html; box.style.display = html ? "block" : "none";
+      box.querySelectorAll(".tsug").forEach(d => d.onmousedown = e => { e.preventDefault(); addEditTag(d.dataset.add); const i=document.getElementById("tag-input"); if(i) i.focus(); });
+    }
+    function wireTagEditor(){
+      renderTagChips();
+      const i = document.getElementById("tag-input"); if(!i) return;
+      i.oninput = () => showTagSuggest(i.value);
+      i.onkeydown = e => {
+        if(e.key==="Enter"){ e.preventDefault();
+          if(i.value.trim()) addEditTag(i.value);
+          else { const f = document.querySelector("#tag-suggest .tsug"); if(f) addEditTag(f.dataset.add); } }
+        else if(e.key==="Backspace" && !i.value && editTags.length){ removeEditTag(editTags[editTags.length-1]); }
+        else if(e.key==="Escape"){ showTagSuggest(""); }
+      };
+      i.onblur = () => setTimeout(()=>showTagSuggest(""), 150);
+    }
     async function saveEdit(){
       const st = document.getElementById("edit-status");
       const title = document.getElementById("edit-title").value.trim();
       if(!title){ st.textContent = "title required"; return; }
+      const pend = document.getElementById("tag-input"); if(pend && pend.value.trim()) addEditTag(pend.value);  // commit a half-typed tag
       st.textContent = "saving...";
       try {
         const r = await fetch("/api/note", { method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({ category: document.getElementById("edit-cat").value, title,
-            text: document.getElementById("edit-area").value, file: curNote.id || null }) }).then(r=>r.json());
+            text: document.getElementById("edit-area").value, file: curNote.id || null, tags: editTags }) }).then(r=>r.json());
         if(r.ok){ document.getElementById("note-backlinks").style.display=""; await reloadGraph(); await openNote(r.file, false); }
         else st.textContent = "error: " + (r.detail||"not saved");
       } catch(e){ st.textContent = "error: " + e.message; }
