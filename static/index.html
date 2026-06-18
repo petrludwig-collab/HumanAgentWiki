@@ -683,8 +683,8 @@
       + row("🔤", s.characters, "characters")
       + `<div>📚 <span class="sv">≈ ${nf(s.pages)}</span></div><div class="sl">standard pages</div>`
       + row("📁", s.categories, "categories")
+      + row("🏷", s.node_tags, "node-tags")
       + row("🏷", s.tags, "tags")
-      + row("●", s.node_tags, "node-tags")
       + row("🔗", s.wikilinks, "links")
       + (s.biggest ? `<div class="full">🏆 top category: <span class="sv">${esc(s.biggest.name)}</span> <span class="sl">(${nf(s.biggest.count)})</span></div>` : "");
     }
