@@ -319,12 +319,28 @@ if pgrep -f "cli.py web" >/dev/null 2>&1; then
 else
   warn "web didn't stay up - check /tmp/haw-web.log, then: cd $DIR && nohup ./haw web >/tmp/haw-web.log 2>&1 &"
 fi
-# Reload the gateway-type agents so they pick up the wiki MCP now. setsid detaches them from this
-# terminal (no foreground hijack) AND from this script's process group (survives our exit). If a
-# supervisor (systemd/keepalive) owns them it will reconcile to a single instance.
-if command -v setsid >/dev/null 2>&1; then
-  command -v hermes   >/dev/null 2>&1 && { setsid hermes gateway restart   </dev/null >/dev/null 2>&1 & ok "Hermes gateway reloaded"; }
-  command -v openclaw >/dev/null 2>&1 && { setsid openclaw gateway restart </dev/null >/dev/null 2>&1 & ok "OpenClaw gateway reloaded"; }
+# Reload running agents so they pick up the wiki MCP now (they only read MCP at startup).
+if [ "${any:-0}" = 1 ]; then
+  step "Reloading running agents so they see the wiki"
+  # Gateways: clean restart. setsid detaches from this terminal (no foreground hijack) and from
+  # this script's process group (survives our exit); a supervisor reconciles to one instance.
+  if command -v setsid >/dev/null 2>&1; then
+    command -v hermes   >/dev/null 2>&1 && { setsid hermes gateway restart   </dev/null >/dev/null 2>&1 & ok "Hermes gateway reloaded"; }
+    command -v openclaw >/dev/null 2>&1 && { setsid openclaw gateway restart </dev/null >/dev/null 2>&1 & ok "OpenClaw gateway reloaded"; }
+  fi
+  # Codex/Claude have no hot-reload — restart their processes so a supervisor respawns them with
+  # the new config. CRITICAL: never kill the process tree running THIS installer (it may be an
+  # agent that launched us). Build the ancestry chain and skip it.
+  KEEP=" $$ "; _p=$$
+  while [ "${_p:-0}" -gt 1 ]; do _p="$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')"; [ -n "$_p" ] && KEEP="$KEEP $_p " || break; done
+  killed=0
+  for pid in $(pgrep -f codex 2>/dev/null; pgrep -f claude 2>/dev/null); do
+    case "$KEEP" in *" $pid "*) continue ;; esac
+    kill "$pid" 2>/dev/null && killed=$((killed + 1))
+  done
+  if [ "$killed" -gt 0 ]; then ok "restarted $killed Codex/Claude process(es) - a supervisor (keepalive/systemd) respawns them with the wiki"
+  else warn "no running Codex/Claude found (sessions you start later already have the wiki)"; fi
+  warn "note: agents NOT under a supervisor won't auto-respawn - relaunch those manually"
 fi
 warn "for persistence after reboot, add './haw serve' and './haw web' to your boot/supervisor"
 
