@@ -240,20 +240,22 @@ if [ "$(lc "$wire")" != "n" ]; then
       || printf '\n[mcp_servers.%s]\nurl = "%s"\n' "$NAME" "$MCP_URL" >> "$cfg"
     ok "Codex -> $NAME"; any=1
   fi
-  # Hermes/OpenClaw 'mcp add' prompt on /dev/tty for an optional API token. Run them detached
-  # from the terminal (setsid) with no stdin, so the prompt can't open a tty and they proceed
-  # with no token (the local wiki MCP needs none) instead of hanging the installer.
-  noprompt() { if command -v setsid >/dev/null; then setsid "$@" </dev/null >/dev/null 2>&1; else "$@" </dev/null >/dev/null 2>&1; fi; }
+  # Hermes: its 'mcp add' prompts on the tty for an optional token (hangs / aborts when scripted).
+  # Write the server straight into its config instead — non-interactive and persistent.
   if command -v hermes >/dev/null; then
-    noprompt hermes mcp add "$NAME" --url "$MCP_URL" \
-      && { ok "Hermes -> $NAME"; any=1; } || warn "Hermes: skipped (maybe already set)"
+    if hermes config set "mcp_servers.$NAME.url" "$MCP_URL" >/dev/null 2>&1 \
+       && hermes config set "mcp_servers.$NAME.enabled" true >/dev/null 2>&1; then
+      ok "Hermes -> $NAME"; HERMES_WIRED=1; any=1
+    else warn "Hermes: couldn't set MCP (add manually: hermes mcp add $NAME --url $MCP_URL)"; fi
   fi
+  # OpenClaw probes the URL and saves; non-interactive with --url.
   if command -v openclaw >/dev/null; then
-    noprompt openclaw mcp add "$NAME" --url "$MCP_URL" \
+    openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
   if [ "$any" = 1 ]; then ok "agents can use: brain_search / brain_get / brain_neighbors"
   else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
+  [ "${HERMES_WIRED:-0}" = 1 ] && warn "Hermes: restart its gateway (or /reload-mcp) to load the new MCP"
 else
   warn "agents not wired - the MCP endpoint is $MCP_URL"
 fi
