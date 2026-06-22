@@ -226,7 +226,7 @@ fi
 step "Connect AI agents (MCP)"
 MCP_PORT_VAL="$( ( set -a; . ./.env 2>/dev/null; set +a; echo "${MCP_PORT:-8802}" ) )"
 MCP_URL="http://127.0.0.1:${MCP_PORT_VAL}/mcp"
-NAME="${HAW_MCP_NAME:-brain}"
+NAME="${HAW_MCP_NAME:-humanagentwiki}"
 wire="$(ask "  Point ALL AI agents on this server (Claude / Codex / Hermes / OpenClaw) at the wiki? [Y/n]: " "Y")"
 if [ "$(lc "$wire")" != "n" ]; then
   any=0
@@ -253,16 +253,12 @@ if [ "$(lc "$wire")" != "n" ]; then
     openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
-  # NB: we deliberately do NOT restart the agents here. How each is run varies (systemd service /
-  # tmux / foreground), so a blind 'gateway restart' can hijack the terminal or leave a daemon
-  # that dies when this script exits. The config is written; reloading is the supervisor's job.
   if [ "$any" = 1 ]; then
     ok "agents can use: brain_search / brain_get / brain_neighbors"
-    warn "they read MCP at startup - already-running sessions need a restart/reload to see it:"
-    command -v hermes >/dev/null && warn "  Hermes:  hermes gateway restart   (or /reload-mcp in chat)"
-    command -v codex  >/dev/null && warn "  Codex:   restart the codex session"
-    command -v claude >/dev/null && warn "  Claude:  restart the claude session"
-    warn "  (agents you start AFTER this install already have it)"
+    # Gateway-type agents (Hermes/OpenClaw) are reloaded in step 12. Codex/Claude are interactive
+    # REPL sessions we can't restart for you.
+    command -v codex  >/dev/null && warn "Codex: restart a running session to load the wiki (new sessions get it automatically)"
+    command -v claude >/dev/null && warn "Claude: restart a running session to load the wiki (new sessions get it automatically)"
   else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
 else
   warn "agents not wired - the MCP endpoint is $MCP_URL"
@@ -314,6 +310,13 @@ sleep 1
 ( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
 ( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
 ok "MCP server + web UI (re)started (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
+# Reload the gateway-type agents so they pick up the wiki MCP now. setsid detaches them from this
+# terminal (no foreground hijack) AND from this script's process group (survives our exit). If a
+# supervisor (systemd/keepalive) owns them it will reconcile to a single instance.
+if command -v setsid >/dev/null 2>&1; then
+  command -v hermes   >/dev/null 2>&1 && { setsid hermes gateway restart   </dev/null >/dev/null 2>&1 & ok "Hermes gateway reloaded"; }
+  command -v openclaw >/dev/null 2>&1 && { setsid openclaw gateway restart </dev/null >/dev/null 2>&1 & ok "OpenClaw gateway reloaded"; }
+fi
 warn "for persistence after reboot, add './haw serve' and './haw web' to your boot/supervisor"
 
 # done + link ---------------------------------------------------------------
