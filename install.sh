@@ -306,10 +306,19 @@ step "Starting HumanAgentWiki"
 # re-run must kill + relaunch, not skip, or config changes silently don't take effect.
 pkill -f "cli.py serve" 2>/dev/null || true
 pkill -f "cli.py web"   2>/dev/null || true
-sleep 1
+# Wait until the old processes are really gone so their ports are free — a too-short sleep let the
+# new web hit "address already in use" and exit immediately.
+for _ in $(seq 1 15); do
+  if pgrep -f "cli.py serve" >/dev/null 2>&1 || pgrep -f "cli.py web" >/dev/null 2>&1; then sleep 1; else break; fi
+done
 ( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
 ( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
-ok "MCP server + web UI (re)started (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
+sleep 3
+if pgrep -f "cli.py web" >/dev/null 2>&1; then
+  ok "MCP server + web UI (re)started (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
+else
+  warn "web didn't stay up - check /tmp/haw-web.log, then: cd $DIR && nohup ./haw web >/tmp/haw-web.log 2>&1 &"
+fi
 # Reload the gateway-type agents so they pick up the wiki MCP now. setsid detaches them from this
 # terminal (no foreground hijack) AND from this script's process group (survives our exit). If a
 # supervisor (systemd/keepalive) owns them it will reconcile to a single instance.
