@@ -52,6 +52,31 @@ async def lifespan(_app):
 app = FastAPI(title="HumanAgentWiki", lifespan=lifespan)
 
 
+# Optional HTTP Basic auth for the whole web UI. Set WEB_AUTH="user:password" to enable;
+# unset = open (unchanged). Protects the personal notes when the UI is reachable over a
+# LAN/VPN. The MCP server (separate process, bound to 127.0.0.1) is not affected.
+WEB_AUTH = os.environ.get("WEB_AUTH", "").strip()
+if WEB_AUTH:
+    import base64
+    import secrets
+    from starlette.responses import Response as _Response
+
+    @app.middleware("http")
+    async def _basic_auth(request, call_next):
+        ok = False
+        hdr = request.headers.get("authorization", "")
+        if hdr.startswith("Basic "):
+            try:
+                ok = secrets.compare_digest(
+                    base64.b64decode(hdr[6:]).decode("utf-8"), WEB_AUTH)
+            except Exception:
+                ok = False
+        if not ok:
+            return _Response(status_code=401,
+                             headers={"WWW-Authenticate": 'Basic realm="HumanAgentWiki"'})
+        return await call_next(request)
+
+
 # ---------- helpers ----------
 def _git(*args):
     # Best-effort versioning: a failing commit (e.g. "nothing to commit") must not
