@@ -245,18 +245,24 @@ if [ "$(lc "$wire")" != "n" ]; then
   if command -v hermes >/dev/null; then
     if hermes config set "mcp_servers.$NAME.url" "$MCP_URL" >/dev/null 2>&1 \
        && hermes config set "mcp_servers.$NAME.enabled" true >/dev/null 2>&1; then
-      ok "Hermes -> $NAME"; HERMES_WIRED=1; any=1
+      # Hermes runs a gateway service we can reload, so the MCP is live immediately.
+      ( hermes gateway restart >/dev/null 2>&1 & ) ; RELOADED="$RELOADED Hermes"
+      ok "Hermes -> $NAME (gateway reloaded)"; any=1
     else warn "Hermes: couldn't set MCP (add manually: hermes mcp add $NAME --url $MCP_URL)"; fi
   fi
-  # OpenClaw probes the URL and saves; non-interactive with --url.
+  # OpenClaw probes the URL and saves; non-interactive with --url. Reload its gateway too.
   if command -v openclaw >/dev/null; then
-    openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
-      && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
+    if openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1; then
+      ( openclaw gateway restart >/dev/null 2>&1 & ) ; RELOADED="$RELOADED OpenClaw"
+      ok "OpenClaw -> $NAME (gateway reloaded)"; any=1
+    else warn "OpenClaw: skipped (maybe already set)"; fi
   fi
   if [ "$any" = 1 ]; then
     ok "agents can use: brain_search / brain_get / brain_neighbors"
-    warn "agents read MCP at startup - RESTART any already-running session to use the wiki now"
-    [ "${HERMES_WIRED:-0}" = 1 ] && warn "  Hermes: 'hermes gateway restart' (or /reload-mcp in chat)"
+    [ -n "$RELOADED" ] && ok "reloaded:${RELOADED} (live now)"
+    # Codex / Claude are interactive sessions this installer can't safely restart for you.
+    { command -v codex >/dev/null || command -v claude >/dev/null; } \
+      && warn "Codex / Claude read MCP at startup - restart a running session (new sessions get it automatically)"
   else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
 else
   warn "agents not wired - the MCP endpoint is $MCP_URL"
