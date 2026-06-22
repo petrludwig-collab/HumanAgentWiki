@@ -62,7 +62,22 @@ cd "$DIR"
 
 # 3) python environment -----------------------------------------------------
 step "Installing Python dependencies (first run downloads PyTorch - be patient)"
-[ -d .venv ] || "$PY" -m venv .venv
+# Debian/Ubuntu ship Python without venv support (no ensurepip). Detect and fix it.
+if ! "$PY" -c "import ensurepip" >/dev/null 2>&1; then
+  pyver="$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
+  warn "Python venv support (ensurepip) is missing - installing python${pyver}-venv (needs sudo)"
+  if command -v apt-get >/dev/null; then
+    sudo apt-get update -qq >/dev/null 2>&1 || true
+    sudo apt-get install -y "python${pyver}-venv" >/dev/null 2>&1 || sudo apt-get install -y python3-venv >/dev/null 2>&1 || true
+  fi
+  "$PY" -c "import ensurepip" >/dev/null 2>&1 \
+    || die "Could not enable venv. Run:  sudo apt install python${pyver}-venv   then re-run this installer."
+  ok "venv support installed"
+fi
+# (Re)create the venv — and drop a half-built one left by a previous failed run.
+if [ ! -x .venv/bin/python ] && [ ! -x .venv/bin/python3 ]; then
+  rm -rf .venv; "$PY" -m venv .venv
+fi
 .venv/bin/pip install -q --upgrade pip
 .venv/bin/pip install -q -r requirements.txt
 ok "dependencies installed"
