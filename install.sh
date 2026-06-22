@@ -74,12 +74,14 @@ if ! "$PY" -c "import ensurepip" >/dev/null 2>&1; then
     || die "Could not enable venv. Run:  sudo apt install python${pyver}-venv   then re-run this installer."
   ok "venv support installed"
 fi
-# (Re)create the venv — and drop a half-built one left by a previous failed run.
-if [ ! -x .venv/bin/python ] && [ ! -x .venv/bin/python3 ]; then
+# (Re)create the venv if it's missing or incomplete. A first run that failed before
+# ensurepip was available leaves a venv with python but NO pip — detect that by probing
+# pip itself (not just the python binary) and rebuild.
+if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
   rm -rf .venv; "$PY" -m venv .venv
 fi
-.venv/bin/pip install -q --upgrade pip
-.venv/bin/pip install -q -r requirements.txt
+.venv/bin/python -m pip install -q --upgrade pip
+.venv/bin/python -m pip install -q -r requirements.txt
 ok "dependencies installed"
 
 # 4) database (Postgres + pgvector) -----------------------------------------
