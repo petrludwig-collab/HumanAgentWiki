@@ -81,7 +81,10 @@ if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
   rm -rf .venv; "$PY" -m venv .venv
 fi
 .venv/bin/python -m pip install -q --upgrade pip
-.venv/bin/python -m pip install -q -r requirements.txt
+# NOT quiet: PyTorch + deps are a large download — show pip's progress bars so a live
+# install doesn't look frozen. (Stdout is the terminal under `curl | bash`, so bars render.)
+warn "downloading PyTorch + dependencies — this is the big one (progress below)"
+.venv/bin/python -m pip install --progress-bar on -r requirements.txt
 ok "dependencies installed"
 
 # 4) database (Postgres + pgvector) -----------------------------------------
