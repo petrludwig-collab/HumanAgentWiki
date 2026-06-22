@@ -17,6 +17,14 @@ ok()   { printf "  ${G}OK${X} %s\n" "$*"; }
 warn() { printf "  ${Y}!${X}  %s\n" "$*"; }
 die()  { printf "  ${R}x  %s${X}\n" "$*" >&2; exit 1; }
 step() { printf "\n${B}${C}==>${X} ${B}%s${X}\n" "$*"; }
+# Prompt the user even under `curl | bash` (stdin is the pipe) by reading /dev/tty.
+# No tty (CI / headless) -> return the default, so non-interactive installs still work.
+ask() {  # $1=prompt  $2=default  -> echoes the answer
+  local a=""
+  if [ -e /dev/tty ]; then printf "%s" "$1" >/dev/tty; IFS= read -r a </dev/tty || a=""; fi
+  printf "%s" "${a:-$2}"
+}
+lc() { printf "%s" "$1" | tr "[:upper:]" "[:lower:]"; }
 
 printf "${B}${C}"
 cat <<'BANNER'
@@ -97,19 +105,88 @@ if command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null \
   .venv/bin/python cli.py init-db && ok "schema ready"
 fi
 
+# 7) notes folder (empty, or seeded with bundled examples) ------------------
+step "Notes folder"
+NOTES_VAL="$DIR/notes"
+mkdir -p "$NOTES_VAL"
+seed="$(ask "  Seed with the bundled example notes so the graph isn't empty? [Y/n]: " "Y")"
+if [ "$(lc "$seed")" != "n" ] && [ -d "$DIR/sample_notes" ]; then
+  cp -R "$DIR/sample_notes/." "$NOTES_VAL/" 2>/dev/null || true
+  ok "seeded example notes -> notes/"
+else
+  ok "empty notes/ folder (drop your Markdown here)"
+fi
+[ -d "$NOTES_VAL/.git" ] || git -C "$NOTES_VAL" init -q 2>/dev/null || true
+if grep -q '^NOTES_DIR=' .env 2>/dev/null; then
+  tmp="$(mktemp)"; sed "s#^NOTES_DIR=.*#NOTES_DIR=$NOTES_VAL#" .env > "$tmp" && mv "$tmp" .env
+else echo "NOTES_DIR=$NOTES_VAL" >> .env; fi
+
+# 8) HTTP auth for the web UI (recommended if reachable over LAN/VPN) --------
+step "Web UI password (HTTP auth)"
+warn "The web UI shows ALL notes. Protect it if it's reachable over LAN/VPN."
+cred="$(ask "  Set username:password for the web UI? (blank = no password): " "")"
+if [ -n "$cred" ]; then
+  if grep -q '^WEB_AUTH=' .env 2>/dev/null; then
+    tmp="$(mktemp)"; sed "s#^WEB_AUTH=.*#WEB_AUTH=$cred#" .env > "$tmp" && mv "$tmp" .env
+  else echo "WEB_AUTH=$cred" >> .env; fi
+  ok "web UI protected (WEB_AUTH set in .env)"
+else
+  warn "web UI left open (no password) - fine for 127.0.0.1 only"
+fi
+chmod 600 .env 2>/dev/null || true
+
+# 9) index the notes --------------------------------------------------------
+if command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null \
+   || { command -v docker >/dev/null && docker info >/dev/null 2>&1; }; then
+  step "Indexing notes (first run loads the embedding model - be patient)"
+  set -a; . ./.env; set +a
+  .venv/bin/python cli.py index && ok "notes indexed"
+fi
+
+# 10) connect this server's AI agents via MCP -------------------------------
+step "Connecting AI agents (MCP)"
+MCP_PORT_VAL="$( ( set -a; . ./.env 2>/dev/null; set +a; echo "${MCP_PORT:-8802}" ) )"
+MCP_URL="http://127.0.0.1:${MCP_PORT_VAL}/mcp"
+NAME="${HAW_MCP_NAME:-brain}"
+wire="$(ask "  Point the AI agents on this server (Claude/Codex/Hermes/OpenClaw) at the wiki? [Y/n]: " "Y")"
+if [ "$(lc "$wire")" != "n" ]; then
+  any=0
+  if command -v claude >/dev/null; then
+    claude mcp add -s user --transport http "$NAME" "$MCP_URL" >/dev/null 2>&1 \
+      && { ok "Claude Code -> $NAME"; any=1; } || warn "Claude Code: skipped (maybe already set)"
+  fi
+  if command -v codex >/dev/null; then
+    cfg="$HOME/.codex/config.toml"; mkdir -p "$HOME/.codex"; touch "$cfg"
+    grep -q "\[mcp_servers.$NAME\]" "$cfg" 2>/dev/null \
+      || printf '\n[mcp_servers.%s]\nurl = "%s"\n' "$NAME" "$MCP_URL" >> "$cfg"
+    ok "Codex -> $NAME"; any=1
+  fi
+  if command -v hermes >/dev/null; then
+    hermes mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 \
+      && { ok "Hermes -> $NAME"; any=1; } || warn "Hermes: skipped (maybe already set)"
+  fi
+  if command -v openclaw >/dev/null; then
+    openclaw mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 \
+      && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
+  fi
+  if [ "$any" = 1 ]; then ok "agents can now use: brain_search / brain_get / brain_neighbors"
+  else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
+else
+  warn "agents not wired - the MCP endpoint will be $MCP_URL"
+fi
+
 # done ----------------------------------------------------------------------
 step "Done!"
 cat <<EOF
 
   ${B}${G}HumanAgentWiki is installed${X}  ->  $DIR
 
-  Next steps:
+  Start it (keep both running; add to your boot/supervisor for persistence):
     cd $DIR
-    ./haw index        # index your notes (put Markdown under ./notes)
-    ./haw web          # web UI at http://127.0.0.1:8808
-    ./haw serve        # MCP server for your AI agents
+    ./haw serve     # MCP server on $MCP_URL  (the agents talk to this)
+    ./haw web       # web UI (uses WEB_AUTH from .env if you set a password)
 
-  Or try the bundled demo right now:
-    NOTES_DIR=./sample_notes ./haw index && ./haw web
+  To reach the web UI over LAN/VPN, set WEB_HOST in .env (e.g. 0.0.0.0) - and
+  keep WEB_AUTH set. Add notes as Markdown under $NOTES_VAL then  ./haw index
 
 EOF
