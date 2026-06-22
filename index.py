@@ -23,9 +23,26 @@ from common import connect, embed, NOTES_DIR
 HEADER_RE = re.compile(r'^(#{2,3})\s+(.*)$')
 LINK_RE   = re.compile(r'\[\[([^\]]+?)\]\]')
 SKIP_DIRS = ('/.git/', '/.obsidian/', '/node_modules/')
+# Settings that must stay consistent across EVERY `index` run — even when invoked by hand
+# without the usual env vars (the classic footgun: an incremental reindex with no
+# CATEGORY_LABELS silently re-labels notes, or a --full run with the wrong INCLUDE_DIRS
+# drops whole folders). Read them from a per-vault JSON config (`.haw.json` in NOTES_DIR,
+# version-controlled with the notes). Explicit env vars still win. Keys: include_dirs (list),
+# category_labels ({raw: "Display"}).
+def _file_config():
+    try:
+        with open(os.path.join(NOTES_DIR, ".haw.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+_FCFG = _file_config()
+
 # Optional allowlist of top-level folders to index, e.g. INCLUDE_DIRS='books,notes'.
 # Empty = index everything under NOTES_DIR. Lets you grow a vault one section at a time.
-INCLUDE_DIRS = [d.strip() for d in os.environ.get("INCLUDE_DIRS", "").split(",") if d.strip()]
+_inc = os.environ.get("INCLUDE_DIRS")
+if _inc is None:
+    _inc = ",".join(_FCFG.get("include_dirs", []))
+INCLUDE_DIRS = [d.strip() for d in _inc.split(",") if d.strip()]
 MIN_CHUNK_CHARS = 25  # skip trivially short blocks (stray lines, empty sections)
 
 
@@ -63,7 +80,8 @@ def split_blocks(body):
 # Optional display names for categories, e.g. CATEGORY_LABELS='{"wiki":"Personal wiki"}'.
 # Without it, the raw project/folder name is used with its first letter capitalized.
 try:
-    CATEGORY_LABELS = json.loads(os.environ.get("CATEGORY_LABELS", "{}"))
+    _lbl = os.environ.get("CATEGORY_LABELS")
+    CATEGORY_LABELS = json.loads(_lbl) if _lbl is not None else _FCFG.get("category_labels", {})
 except Exception:
     CATEGORY_LABELS = {}
 
