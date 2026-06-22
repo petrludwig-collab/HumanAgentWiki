@@ -286,15 +286,24 @@ if [ "$(lc "$want")" = "y" ]; then
     ok "web UI protected (login: $u / password hidden)"
   else warn "username or password empty - left open"; fi
 else
+  # "no password" must really mean open: strip any WEB_AUTH left by a previous run.
+  if grep -q '^WEB_AUTH=' .env 2>/dev/null; then
+    tmp="$(mktemp)"; grep -v '^WEB_AUTH=' .env > "$tmp" && mv "$tmp" .env
+  fi
   warn "web UI left open (no password)"
 fi
 chmod 600 .env 2>/dev/null || true
 
-# 12) start it now (background) so the link works right away ----------------
+# 12) (re)start it so the CURRENT config (model, host, auth) actually applies -
 step "Starting HumanAgentWiki"
-pgrep -f "cli.py serve" >/dev/null 2>&1 || ( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
-pgrep -f "cli.py web"   >/dev/null 2>&1 || ( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
-ok "MCP server + web UI launching (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
+# Always restart: a running server still holds the OLD env (e.g. a previous password), so a
+# re-run must kill + relaunch, not skip, or config changes silently don't take effect.
+pkill -f "cli.py serve" 2>/dev/null || true
+pkill -f "cli.py web"   2>/dev/null || true
+sleep 1
+( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
+( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
+ok "MCP server + web UI (re)started (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
 warn "for persistence after reboot, add './haw serve' and './haw web' to your boot/supervisor"
 
 # done + link ---------------------------------------------------------------
