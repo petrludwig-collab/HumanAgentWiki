@@ -138,18 +138,63 @@ if pg_ready && [ "$DB_URL" = "dbname=$DB" ]; then
     && ok "database '$DB' ready" || warn "could not connect to '$DB' yet"
 fi
 
-# 5) configuration ----------------------------------------------------------
+# 5) configuration: DB url + RAM-adaptive embedding model -------------------
 step "Writing configuration"
 [ -f .env ] || cp .env.example .env
 tmp="$(mktemp)"; sed "s#^DATABASE_URL=.*#DATABASE_URL=$DB_URL#" .env > "$tmp" && mv "$tmp" .env
-ok "wrote .env (database connection set)"
+# Pick the embedding model by available RAM. BGE-M3 is excellent for Czech but needs ~2.3 GB to
+# load (and serve + web each load a copy). On small servers fall back to a light multilingual
+# model (still handles Czech + 100 languages) that loads in a fraction of the RAM.
+RAM_MB="$(free -m 2>/dev/null | awk '/^Mem:/{print $2}')"; RAM_MB="${RAM_MB:-0}"
+if [ "$RAM_MB" -lt 6000 ]; then
+  EMB_MODEL="intfloat/multilingual-e5-small"; EMB_DIM="384"
+  warn "small server (${RAM_MB} MB RAM) - using a lighter multilingual model (e5-small, 384d)"
+else
+  EMB_MODEL="BAAI/bge-m3"; EMB_DIM="1024"
+  ok "using BGE-M3 (server has ${RAM_MB} MB RAM)"
+fi
+for kv in "EMBED_MODEL=$EMB_MODEL" "EMBED_DIM=$EMB_DIM"; do
+  k="${kv%%=*}"
+  if grep -q "^${k}=" .env 2>/dev/null; then
+    tmp="$(mktemp)"; sed "s#^${k}=.*#${kv}#" .env > "$tmp" && mv "$tmp" .env
+  else echo "$kv" >> .env; fi
+done
+ok "wrote .env"
 chmod +x haw 2>/dev/null || true
+
+# 5b) swap — safety net so the embedding model loads when free RAM is tight --
+SWAP_KB="$(free -k 2>/dev/null | awk '/^Swap:/{print $2}')"; SWAP_KB="${SWAP_KB:-0}"
+if [ "$SWAP_KB" -eq 0 ] && [ "$RAM_MB" -lt 8000 ] && [ ! -e /swapfile ] && command -v sudo >/dev/null; then
+  step "Adding 4 GB swap (safety for model loading on a small server)"
+  if { sudo fallocate -l 4G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none 2>/dev/null; } \
+     && sudo chmod 600 /swapfile && sudo mkswap /swapfile >/dev/null 2>&1 && sudo swapon /swapfile 2>/dev/null; then
+    grep -q '/swapfile' /etc/fstab 2>/dev/null || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+    ok "4 GB swap active (survives reboot)"
+  else warn "could not add swap (continuing anyway)"; fi
+fi
 
 # 6) schema -----------------------------------------------------------------
 if command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null \
    || { command -v docker >/dev/null && docker info >/dev/null 2>&1; }; then
   step "Creating database schema"
   set -a; . ./.env; set +a
+  # If a chunks table already exists with a different vector dimension (model changed), drop it
+  # so the schema is recreated for the new dim. The index step repopulates from your notes.
+  CUR_DIM="$(.venv/bin/python - <<'PY' 2>/dev/null
+import os, psycopg
+try:
+    c = psycopg.connect(os.environ["DATABASE_URL"]); cur = c.cursor()
+    cur.execute("select a.atttypmod from pg_attribute a join pg_class c on a.attrelid=c.oid "
+                "where c.relname='chunks' and a.attname='embedding'")
+    r = cur.fetchone(); print(r[0] if r and r[0] > 0 else "")
+except Exception:
+    print("")
+PY
+)"
+  if [ -n "$CUR_DIM" ] && [ "$CUR_DIM" != "${EMBED_DIM:-1024}" ]; then
+    warn "embedding dimension changed ($CUR_DIM -> ${EMBED_DIM}) - recreating schema"
+    .venv/bin/python -c "import os,psycopg;c=psycopg.connect(os.environ['DATABASE_URL']);cur=c.cursor();cur.execute('DROP TABLE IF EXISTS chunks CASCADE');cur.execute('DROP TABLE IF EXISTS files CASCADE');c.commit()" 2>/dev/null || true
+  fi
   .venv/bin/python cli.py init-db && ok "schema ready"
 fi
 
@@ -195,14 +240,16 @@ if [ "$(lc "$wire")" != "n" ]; then
       || printf '\n[mcp_servers.%s]\nurl = "%s"\n' "$NAME" "$MCP_URL" >> "$cfg"
     ok "Codex -> $NAME"; any=1
   fi
+  # Hermes/OpenClaw 'mcp add' prompt on /dev/tty for an optional API token. Run them detached
+  # from the terminal (setsid) with no stdin, so the prompt can't open a tty and they proceed
+  # with no token (the local wiki MCP needs none) instead of hanging the installer.
+  noprompt() { if command -v setsid >/dev/null; then setsid "$@" </dev/null >/dev/null 2>&1; else "$@" </dev/null >/dev/null 2>&1; fi; }
   if command -v hermes >/dev/null; then
-    # </dev/null so the optional "API key / Bearer token" prompt gets an empty answer
-    # (the local wiki MCP needs no token) instead of hanging the installer.
-    hermes mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
+    noprompt hermes mcp add "$NAME" --url "$MCP_URL" \
       && { ok "Hermes -> $NAME"; any=1; } || warn "Hermes: skipped (maybe already set)"
   fi
   if command -v openclaw >/dev/null; then
-    openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
+    noprompt openclaw mcp add "$NAME" --url "$MCP_URL" \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
   if [ "$any" = 1 ]; then ok "agents can use: brain_search / brain_get / brain_neighbors"
