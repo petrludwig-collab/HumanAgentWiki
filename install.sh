@@ -328,19 +328,11 @@ if [ "${any:-0}" = 1 ]; then
     command -v hermes   >/dev/null 2>&1 && { setsid hermes gateway restart   </dev/null >/dev/null 2>&1 & ok "Hermes gateway reloaded"; }
     command -v openclaw >/dev/null 2>&1 && { setsid openclaw gateway restart </dev/null >/dev/null 2>&1 & ok "OpenClaw gateway reloaded"; }
   fi
-  # Codex/Claude have no hot-reload — restart their processes so a supervisor respawns them with
-  # the new config. CRITICAL: never kill the process tree running THIS installer (it may be an
-  # agent that launched us). Build the ancestry chain and skip it.
-  KEEP=" $$ "; _p=$$
-  while [ "${_p:-0}" -gt 1 ]; do _p="$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')"; [ -n "$_p" ] && KEEP="$KEEP $_p " || break; done
-  killed=0
-  for pid in $(pgrep -f codex 2>/dev/null; pgrep -f claude 2>/dev/null); do
-    case "$KEEP" in *" $pid "*) continue ;; esac
-    kill "$pid" 2>/dev/null && killed=$((killed + 1))
-  done
-  if [ "$killed" -gt 0 ]; then ok "restarted $killed Codex/Claude process(es) - a supervisor (keepalive/systemd) respawns them with the wiki"
-  else warn "no running Codex/Claude found (sessions you start later already have the wiki)"; fi
-  warn "note: agents NOT under a supervisor won't auto-respawn - relaunch those manually"
+  # Codex/Claude have no hot-reload and no gateway. We deliberately DON'T kill them: a blind kill
+  # took an agent down with no respawn (supervisors vary / may not own it). They load the wiki on
+  # their next restart — which the user's supervisor or the user does.
+  command -v codex  >/dev/null 2>&1 && warn "Codex: restart its session to load the wiki (new sessions already have it)"
+  command -v claude >/dev/null 2>&1 && warn "Claude: restart its session to load the wiki (new sessions already have it)"
 fi
 warn "for persistence after reboot, add './haw serve' and './haw web' to your boot/supervisor"
 
