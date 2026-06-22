@@ -90,31 +90,43 @@ ok "dependencies installed"
 # 4) database (Postgres + pgvector) -----------------------------------------
 step "Setting up PostgreSQL (pgvector)"
 DB_URL="dbname=$DB"
-if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-  docker compose up -d >/dev/null
+pg_ready() { command -v pg_isready >/dev/null 2>&1 && pg_isready -q 2>/dev/null; }
+if command -v docker >/dev/null && docker info >/dev/null 2>&1 && [ -f docker-compose.yml ]; then
+  docker compose up -d >/dev/null 2>&1 || sudo docker compose up -d >/dev/null 2>&1 || true
   DB_URL="dbname=humanagentwiki user=humanagentwiki password=humanagentwiki host=localhost port=5432"
   for _ in $(seq 1 30); do
-    if .venv/bin/python -c "import psycopg; psycopg.connect('$DB_URL').close()" 2>/dev/null; then break; fi
-    sleep 1
+    .venv/bin/python -c "import psycopg; psycopg.connect('$DB_URL').close()" 2>/dev/null && break; sleep 1
   done
-  ok "Postgres running via docker compose"
-elif command -v createdb >/dev/null && command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null; then
-  createdb "$DB" 2>/dev/null || true
-  ok "using local PostgreSQL (database '$DB')"
+  ok "Postgres running via docker compose (pgvector image)"
+elif pg_ready; then
+  ok "using the PostgreSQL already running on this machine"
+elif command -v apt-get >/dev/null; then
+  warn "No PostgreSQL found - installing PostgreSQL + pgvector (needs sudo)"
+  sudo apt-get update -qq >/dev/null 2>&1 || true
+  sudo apt-get install -y postgresql postgresql-contrib >/dev/null 2>&1 || warn "postgres install hit an issue"
+  PGMAJ="$(ls /usr/lib/postgresql/ 2>/dev/null | sort -n | tail -1)"
+  sudo apt-get install -y "postgresql-${PGMAJ}-pgvector" >/dev/null 2>&1 \
+    || sudo apt-get install -y postgresql-pgvector >/dev/null 2>&1 \
+    || warn "pgvector apt package not found - schema may fail (alternative: install Docker and re-run)"
+  sudo systemctl enable --now postgresql >/dev/null 2>&1 || true
+  ok "PostgreSQL installed"
 else
-  warn "No running PostgreSQL found - schema step will be skipped."
-  warn "Start one with:  docker compose up -d   (needs Docker), then re-run this script."
+  warn "No PostgreSQL, Docker, or apt - install PostgreSQL+pgvector manually, then re-run."
+fi
+# For a local/native Postgres: give this OS user a role + the database (peer auth on the socket).
+if pg_ready && [ "$DB_URL" = "dbname=$DB" ]; then
+  sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$USER'" 2>/dev/null | grep -q 1 \
+    || sudo -u postgres createuser -s "$USER" 2>/dev/null || true
+  createdb "$DB" 2>/dev/null || true
+  .venv/bin/python -c "import psycopg; psycopg.connect('dbname=$DB').close()" 2>/dev/null \
+    && ok "database '$DB' ready" || warn "could not connect to '$DB' yet"
 fi
 
 # 5) configuration ----------------------------------------------------------
 step "Writing configuration"
-if [ ! -f .env ]; then
-  cp .env.example .env
-  tmp="$(mktemp)"; sed "s#^DATABASE_URL=.*#DATABASE_URL=$DB_URL#" .env > "$tmp" && mv "$tmp" .env
-  ok "wrote .env"
-else
-  ok ".env already present (kept as-is)"
-fi
+[ -f .env ] || cp .env.example .env
+tmp="$(mktemp)"; sed "s#^DATABASE_URL=.*#DATABASE_URL=$DB_URL#" .env > "$tmp" && mv "$tmp" .env
+ok "wrote .env (database connection set)"
 chmod +x haw 2>/dev/null || true
 
 # 6) schema -----------------------------------------------------------------
@@ -168,11 +180,13 @@ if [ "$(lc "$wire")" != "n" ]; then
     ok "Codex -> $NAME"; any=1
   fi
   if command -v hermes >/dev/null; then
-    hermes mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 \
+    # </dev/null so the optional "API key / Bearer token" prompt gets an empty answer
+    # (the local wiki MCP needs no token) instead of hanging the installer.
+    hermes mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
       && { ok "Hermes -> $NAME"; any=1; } || warn "Hermes: skipped (maybe already set)"
   fi
   if command -v openclaw >/dev/null; then
-    openclaw mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 \
+    openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
   if [ "$any" = 1 ]; then ok "agents can use: brain_search / brain_get / brain_neighbors"
