@@ -121,21 +121,7 @@ if grep -q '^NOTES_DIR=' .env 2>/dev/null; then
   tmp="$(mktemp)"; sed "s#^NOTES_DIR=.*#NOTES_DIR=$NOTES_VAL#" .env > "$tmp" && mv "$tmp" .env
 else echo "NOTES_DIR=$NOTES_VAL" >> .env; fi
 
-# 8) HTTP auth for the web UI (recommended if reachable over LAN/VPN) --------
-step "Web UI password (HTTP auth)"
-warn "The web UI shows ALL notes. Protect it if it's reachable over LAN/VPN."
-cred="$(ask "  Set username:password for the web UI? (blank = no password): " "")"
-if [ -n "$cred" ]; then
-  if grep -q '^WEB_AUTH=' .env 2>/dev/null; then
-    tmp="$(mktemp)"; sed "s#^WEB_AUTH=.*#WEB_AUTH=$cred#" .env > "$tmp" && mv "$tmp" .env
-  else echo "WEB_AUTH=$cred" >> .env; fi
-  ok "web UI protected (WEB_AUTH set in .env)"
-else
-  warn "web UI left open (no password) - fine for 127.0.0.1 only"
-fi
-chmod 600 .env 2>/dev/null || true
-
-# 9) index the notes --------------------------------------------------------
+# 8) index the notes --------------------------------------------------------
 if command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null \
    || { command -v docker >/dev/null && docker info >/dev/null 2>&1; }; then
   step "Indexing notes (first run loads the embedding model - be patient)"
@@ -143,12 +129,12 @@ if command -v pg_isready >/dev/null && pg_isready -q 2>/dev/null \
   .venv/bin/python cli.py index && ok "notes indexed"
 fi
 
-# 10) connect this server's AI agents via MCP -------------------------------
-step "Connecting AI agents (MCP)"
+# 9) connect ALL this server's AI agents via MCP ----------------------------
+step "Connect AI agents (MCP)"
 MCP_PORT_VAL="$( ( set -a; . ./.env 2>/dev/null; set +a; echo "${MCP_PORT:-8802}" ) )"
 MCP_URL="http://127.0.0.1:${MCP_PORT_VAL}/mcp"
 NAME="${HAW_MCP_NAME:-brain}"
-wire="$(ask "  Point the AI agents on this server (Claude/Codex/Hermes/OpenClaw) at the wiki? [Y/n]: " "Y")"
+wire="$(ask "  Point ALL AI agents on this server (Claude / Codex / Hermes / OpenClaw) at the wiki? [Y/n]: " "Y")"
 if [ "$(lc "$wire")" != "n" ]; then
   any=0
   if command -v claude >/dev/null; then
@@ -169,24 +155,66 @@ if [ "$(lc "$wire")" != "n" ]; then
     openclaw mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
-  if [ "$any" = 1 ]; then ok "agents can now use: brain_search / brain_get / brain_neighbors"
+  if [ "$any" = 1 ]; then ok "agents can use: brain_search / brain_get / brain_neighbors"
   else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
 else
-  warn "agents not wired - the MCP endpoint will be $MCP_URL"
+  warn "agents not wired - the MCP endpoint is $MCP_URL"
 fi
 
-# done ----------------------------------------------------------------------
+# 10) network reach: localhost only, or visible from outside ----------------
+step "Web UI access"
+WEB_PORT_VAL="$( ( set -a; . ./.env 2>/dev/null; set +a; echo "${WEB_PORT:-8808}" ) )"
+echo "  The web UI is always reachable on this machine (http://127.0.0.1:$WEB_PORT_VAL)."
+vis="$(ask "  Also make it visible from outside - the server's IP / the internet? [y/N]: " "N")"
+if [ "$(lc "$vis")" = "y" ]; then WEB_HOST_VAL="0.0.0.0"; else WEB_HOST_VAL="127.0.0.1"; fi
+if grep -q '^WEB_HOST=' .env 2>/dev/null; then
+  tmp="$(mktemp)"; sed "s#^WEB_HOST=.*#WEB_HOST=$WEB_HOST_VAL#" .env > "$tmp" && mv "$tmp" .env
+else echo "WEB_HOST=$WEB_HOST_VAL" >> .env; fi
+if [ "$WEB_HOST_VAL" = "0.0.0.0" ]; then warn "visible from outside - set a password below (strongly recommended)"
+else ok "kept private (127.0.0.1 only)"; fi
+
+# 11) HTTP auth (defaults to YES when the UI is visible from outside) --------
+step "Web UI password (HTTP auth)"
+warn "The web UI shows ALL your notes."
+if [ "$WEB_HOST_VAL" = "0.0.0.0" ]; then want="$(ask "  Protect it with a username:password? [Y/n]: " "Y")"
+else want="$(ask "  Protect it with a username:password? [y/N]: " "N")"; fi
+if [ "$(lc "$want")" = "y" ]; then
+  cred="$(ask "    enter as  user:password  : " "")"
+  if [ -n "$cred" ]; then
+    if grep -q '^WEB_AUTH=' .env 2>/dev/null; then
+      tmp="$(mktemp)"; sed "s#^WEB_AUTH=.*#WEB_AUTH=$cred#" .env > "$tmp" && mv "$tmp" .env
+    else echo "WEB_AUTH=$cred" >> .env; fi
+    ok "web UI protected (WEB_AUTH set)"
+  else warn "nothing entered - left open"; fi
+else
+  warn "web UI left open (no password)"
+fi
+chmod 600 .env 2>/dev/null || true
+
+# 12) start it now (background) so the link works right away ----------------
+step "Starting HumanAgentWiki"
+pgrep -f "cli.py serve" >/dev/null 2>&1 || ( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
+pgrep -f "cli.py web"   >/dev/null 2>&1 || ( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
+ok "MCP server + web UI launching (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
+warn "for persistence after reboot, add './haw serve' and './haw web' to your boot/supervisor"
+
+# done + link ---------------------------------------------------------------
+PRIMARY_IP="$(.venv/bin/python - <<'PYIP'
+import socket
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("1.1.1.1", 80))
+    print(s.getsockname()[0]); s.close()
+except Exception:
+    print("127.0.0.1")
+PYIP
+)"
 step "Done!"
-cat <<EOF
-
-  ${B}${G}HumanAgentWiki is installed${X}  ->  $DIR
-
-  Start it (keep both running; add to your boot/supervisor for persistence):
-    cd $DIR
-    ./haw serve     # MCP server on $MCP_URL  (the agents talk to this)
-    ./haw web       # web UI (uses WEB_AUTH from .env if you set a password)
-
-  To reach the web UI over LAN/VPN, set WEB_HOST in .env (e.g. 0.0.0.0) - and
-  keep WEB_AUTH set. Add notes as Markdown under $NOTES_VAL then  ./haw index
-
-EOF
+printf "\n  ${B}${G}HumanAgentWiki is installed${X}  ->  %s\n" "$DIR"
+printf "\n  ${B}Open the wiki:${X}\n"
+if [ "$WEB_HOST_VAL" = "0.0.0.0" ]; then
+  printf "    ${C}http://%s:%s${X}   (local: http://127.0.0.1:%s)\n" "$PRIMARY_IP" "$WEB_PORT_VAL" "$WEB_PORT_VAL"
+else
+  printf "    ${C}http://127.0.0.1:%s${X}\n" "$WEB_PORT_VAL"
+fi
+printf "\n  Agents query it via MCP at %s\n" "$MCP_URL"
+printf "  Add your own notes as Markdown under %s   then  ./haw index\n\n" "$NOTES_VAL"
