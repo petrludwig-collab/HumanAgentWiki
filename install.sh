@@ -235,10 +235,10 @@ if [ "$(lc "$wire")" != "n" ]; then
       && { ok "Claude Code -> $NAME"; any=1; } || warn "Claude Code: skipped (maybe already set)"
   fi
   if command -v codex >/dev/null; then
-    cfg="$HOME/.codex/config.toml"; mkdir -p "$HOME/.codex"; touch "$cfg"
-    grep -q "\[mcp_servers.$NAME\]" "$cfg" 2>/dev/null \
-      || printf '\n[mcp_servers.%s]\nurl = "%s"\n' "$NAME" "$MCP_URL" >> "$cfg"
-    ok "Codex -> $NAME"; any=1
+    codex mcp add "$NAME" --url "$MCP_URL" >/dev/null 2>&1 || true   # idempotent; verify below
+    if codex mcp list 2>/dev/null | grep -q "^$NAME\b\|[[:space:]]$NAME[[:space:]]"; then
+      ok "Codex -> $NAME"; any=1
+    else warn "Codex: couldn't add (try: codex mcp add $NAME --url $MCP_URL)"; fi
   fi
   # Hermes: its 'mcp add' prompts on the tty for an optional token (hangs / aborts when scripted).
   # Write the server straight into its config instead — non-interactive and persistent.
@@ -253,9 +253,11 @@ if [ "$(lc "$wire")" != "n" ]; then
     openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
       && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
   fi
-  if [ "$any" = 1 ]; then ok "agents can use: brain_search / brain_get / brain_neighbors"
+  if [ "$any" = 1 ]; then
+    ok "agents can use: brain_search / brain_get / brain_neighbors"
+    warn "agents read MCP at startup - RESTART any already-running session to use the wiki now"
+    [ "${HERMES_WIRED:-0}" = 1 ] && warn "  Hermes: 'hermes gateway restart' (or /reload-mcp in chat)"
   else warn "no agent CLI found on PATH - register $MCP_URL manually in each agent"; fi
-  [ "${HERMES_WIRED:-0}" = 1 ] && warn "Hermes: restart its gateway (or /reload-mcp) to load the new MCP"
 else
   warn "agents not wired - the MCP endpoint is $MCP_URL"
 fi
