@@ -25,6 +25,22 @@ ask() {  # $1=prompt  $2=default  -> echoes the answer
   printf "%s" "${a:-$2}"
 }
 lc() { printf "%s" "$1" | tr "[:upper:]" "[:lower:]"; }
+# Read a secret from /dev/tty without echoing it; show one '*' per character (with backspace).
+ask_secret() {  # $1=prompt  -> echoes the typed secret
+  local prompt="$1" pw="" ch
+  [ -e /dev/tty ] || { printf ""; return; }
+  printf "%s" "$prompt" >/dev/tty
+  while IFS= read -rsn1 ch </dev/tty; do
+    [ -z "$ch" ] && break                                   # Enter -> done
+    if [ "$ch" = $'\177' ] || [ "$ch" = $'\b' ]; then       # backspace
+      [ -n "$pw" ] && { pw="${pw%?}"; printf '\b \b' >/dev/tty; }
+    else
+      pw="$pw$ch"; printf '*' >/dev/tty
+    fi
+  done
+  printf '\n' >/dev/tty
+  printf '%s' "$pw"
+}
 
 printf "${B}${C}"
 cat <<'BANNER'
@@ -213,13 +229,15 @@ warn "The web UI shows ALL your notes."
 if [ "$WEB_HOST_VAL" = "0.0.0.0" ]; then want="$(ask "  Protect it with a username:password? [Y/n]: " "Y")"
 else want="$(ask "  Protect it with a username:password? [y/N]: " "N")"; fi
 if [ "$(lc "$want")" = "y" ]; then
-  cred="$(ask "    enter as  user:password  : " "")"
-  if [ -n "$cred" ]; then
+  u="$(ask "    username: " "")"
+  p="$(ask_secret "    password: ")"
+  if [ -n "$u" ] && [ -n "$p" ]; then
+    cred="$u:$p"
     if grep -q '^WEB_AUTH=' .env 2>/dev/null; then
       tmp="$(mktemp)"; sed "s#^WEB_AUTH=.*#WEB_AUTH=$cred#" .env > "$tmp" && mv "$tmp" .env
     else echo "WEB_AUTH=$cred" >> .env; fi
-    ok "web UI protected (WEB_AUTH set)"
-  else warn "nothing entered - left open"; fi
+    ok "web UI protected (login: $u / password hidden)"
+  else warn "username or password empty - left open"; fi
 else
   warn "web UI left open (no password)"
 fi
