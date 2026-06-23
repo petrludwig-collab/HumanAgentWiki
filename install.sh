@@ -103,7 +103,9 @@ fi
 # sees movement, even during the quiet resolver phase.
 warn "downloading PyTorch + dependencies — the big step, several minutes (live progress below)"
 PIPLOG="$(mktemp)"
-.venv/bin/python -m pip install --progress-bar on -r requirements.txt >"$PIPLOG" 2>&1 &
+# `</dev/null` is critical under `curl | bash`: a backgrounded job otherwise inherits the
+# script-pipe as stdin and consumes it, so bash hits EOF and silently stops mid-install.
+.venv/bin/python -m pip install --progress-bar on -r requirements.txt >"$PIPLOG" 2>&1 </dev/null &
 pip_pid=$!
 secs=0
 while kill -0 "$pip_pid" 2>/dev/null; do
@@ -325,8 +327,8 @@ pkill -f "cli.py web"   2>/dev/null || true
 for _ in $(seq 1 15); do
   if pgrep -f "cli.py serve" >/dev/null 2>&1 || pgrep -f "cli.py web" >/dev/null 2>&1; then sleep 1; else break; fi
 done
-( nohup ./haw serve >/tmp/haw-serve.log 2>&1 & disown ) 2>/dev/null || true
-( nohup ./haw web   >/tmp/haw-web.log   2>&1 & disown ) 2>/dev/null || true
+( nohup ./haw serve >/tmp/haw-serve.log 2>&1 </dev/null & disown ) 2>/dev/null || true
+( nohup ./haw web   >/tmp/haw-web.log   2>&1 </dev/null & disown ) 2>/dev/null || true
 sleep 3
 if pgrep -f "cli.py web" >/dev/null 2>&1; then
   ok "MCP server + web UI (re)started (logs: /tmp/haw-serve.log, /tmp/haw-web.log)"
