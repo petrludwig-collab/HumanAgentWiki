@@ -333,6 +333,12 @@ pkill -f "cli.py web"   2>/dev/null || true
 for _ in $(seq 1 15); do
   if pgrep -f "cli.py serve" >/dev/null 2>&1 || pgrep -f "cli.py web" >/dev/null 2>&1; then sleep 1; else break; fi
 done
+# Re-load .env so the FINAL config (WEB_HOST / WEB_AUTH chosen by the prompts above) is in the
+# environment the servers inherit. An earlier `set -a; . ./.env` baked stale defaults (notably
+# WEB_HOST=127.0.0.1) into this shell; since ./haw only sets vars NOT already in the environment,
+# that stale value would otherwise shadow the updated file and the web would bind to localhost
+# even when the user chose "visible from outside".
+set -a; . ./.env; set +a
 ( nohup ./haw serve >/tmp/haw-serve.log 2>&1 </dev/null & disown ) 2>/dev/null || true
 ( nohup ./haw web   >/tmp/haw-web.log   2>&1 </dev/null & disown ) 2>/dev/null || true
 sleep 3
