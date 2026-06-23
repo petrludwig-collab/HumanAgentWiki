@@ -97,10 +97,24 @@ if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
   rm -rf .venv; "$PY" -m venv .venv
 fi
 .venv/bin/python -m pip install -q --upgrade pip
-# NOT quiet: PyTorch + deps are a large download — show pip's progress bars so a live
-# install doesn't look frozen. (Stdout is the terminal under `curl | bash`, so bars render.)
-warn "downloading PyTorch + dependencies — this is the big one (progress below)"
-.venv/bin/python -m pip install --progress-bar on -r requirements.txt
+# PyTorch + deps are a large download, and pip can sit SILENT for minutes while it resolves
+# dependencies before any bytes move — that looks frozen. Run pip in the background and show a
+# live heartbeat (elapsed time + .venv size + what pip is currently fetching) so the user always
+# sees movement, even during the quiet resolver phase.
+warn "downloading PyTorch + dependencies — the big step, several minutes (live progress below)"
+PIPLOG="$(mktemp)"
+.venv/bin/python -m pip install --progress-bar on -r requirements.txt >"$PIPLOG" 2>&1 &
+pip_pid=$!
+secs=0
+while kill -0 "$pip_pid" 2>/dev/null; do
+  cur="$(grep -aoE '(Collecting|Downloading|Using cached|Building|Installing|Preparing|Successfully)[[:print:]]*' "$PIPLOG" 2>/dev/null | tail -1)"
+  dl="$(du -sh .venv 2>/dev/null | cut -f1)"
+  printf '\r   %s⏳%s %4ds  .venv:%-6s  %-46.46s' "$C" "$X" "$secs" "${dl:-?}" "${cur:-resolving dependencies…}"
+  sleep 5; secs=$((secs + 5))
+done
+printf '\r%-90s\r' ' '
+wait "$pip_pid" || { printf '\n'; tail -25 "$PIPLOG"; rm -f "$PIPLOG"; die "pip install failed (log above)"; }
+rm -f "$PIPLOG"
 ok "dependencies installed"
 
 # 4) database (Postgres + pgvector) -----------------------------------------
