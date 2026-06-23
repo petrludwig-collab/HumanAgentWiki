@@ -103,8 +103,12 @@ fi
 # sees movement, even during the quiet resolver phase.
 warn "downloading PyTorch + dependencies — the big step, several minutes (live progress below)"
 PIPLOG="$(mktemp)"
-# `</dev/null` is critical under `curl | bash`: a backgrounded job otherwise inherits the
-# script-pipe as stdin and consumes it, so bash hits EOF and silently stops mid-install.
+# Disable errexit/pipefail for the heartbeat: the grep below finds nothing early on (empty log),
+# which under `set -o pipefail` makes the whole pipeline non-zero and would otherwise abort the
+# script SILENTLY mid-install. pip's real exit code is captured explicitly via `wait` instead.
+# `</dev/null` also matters under `curl | bash`: a backgrounded job otherwise inherits the
+# script-pipe as stdin and drains it, making bash hit EOF and stop.
+set +e +o pipefail
 .venv/bin/python -m pip install --progress-bar on -r requirements.txt >"$PIPLOG" 2>&1 </dev/null &
 pip_pid=$!
 secs=0
@@ -114,8 +118,10 @@ while kill -0 "$pip_pid" 2>/dev/null; do
   printf '\r   %s⏳%s %4ds  .venv:%-6s  %-46.46s' "$C" "$X" "$secs" "${dl:-?}" "${cur:-resolving dependencies…}"
   sleep 5; secs=$((secs + 5))
 done
+wait "$pip_pid"; piprc=$?
+set -e -o pipefail
 printf '\r%-90s\r' ' '
-wait "$pip_pid" || { printf '\n'; tail -25 "$PIPLOG"; rm -f "$PIPLOG"; die "pip install failed (log above)"; }
+if [ "$piprc" -ne 0 ]; then printf '\n'; tail -25 "$PIPLOG"; rm -f "$PIPLOG"; die "pip install failed (log above)"; fi
 rm -f "$PIPLOG"
 ok "dependencies installed"
 
