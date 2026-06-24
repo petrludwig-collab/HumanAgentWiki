@@ -270,10 +270,16 @@ if [ "$(lc "$wire")" != "n" ]; then
       ok "Hermes -> $NAME"; any=1
     else warn "Hermes: couldn't set MCP (add manually: hermes mcp add $NAME --url $MCP_URL)"; fi
   fi
-  # OpenClaw probes the URL and saves; non-interactive with --url.
+  # OpenClaw probes the URL before saving; the wiki MCP is FastMCP streamable-HTTP at /mcp,
+  # so we MUST pass --transport streamable-http or the probe fails and nothing is saved.
   if command -v openclaw >/dev/null; then
-    openclaw mcp add "$NAME" --url "$MCP_URL" </dev/null >/dev/null 2>&1 \
-      && { ok "OpenClaw -> $NAME"; any=1; } || warn "OpenClaw: skipped (maybe already set)"
+    if openclaw mcp add "$NAME" --url "$MCP_URL" --transport streamable-http </dev/null >/dev/null 2>&1; then
+      ok "OpenClaw -> $NAME"; any=1
+    elif openclaw mcp list 2>/dev/null | grep -q "[[:space:]]$NAME$\|^- $NAME$"; then
+      ok "OpenClaw -> $NAME (already set)"; any=1
+    else
+      warn "OpenClaw: couldn't add (try: openclaw mcp add $NAME --url $MCP_URL --transport streamable-http)"
+    fi
   fi
   if [ "$any" = 1 ]; then
     ok "agents can use: brain_search / brain_get / brain_neighbors"
