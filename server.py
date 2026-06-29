@@ -5,6 +5,8 @@ kept in memory. Any MCP-compatible agent (Claude, etc.) connects to it.
 
 Tools: brain_search, brain_get, brain_neighbors.
 """
+import os
+
 from mcp.server.fastmcp import FastMCP
 from psycopg.rows import dict_row
 
@@ -71,8 +73,11 @@ def brain_get(title_or_file: str) -> list:
     """Return the full text of notes by exact title or file path."""
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
+    # ORDER BY file, id so a multi-chunk note reads back in document order (matches
+    # how web.py reconstructs notes); without it Postgres returns sections shuffled.
     cur.execute("SELECT file, category, node_type, title, links, text FROM chunks "
-                "WHERE title = %s OR file = %s LIMIT 25", (title_or_file, title_or_file))
+                "WHERE title = %s OR file = %s ORDER BY file, id LIMIT 25",
+                (title_or_file, title_or_file))
     out = [dict(row) for row in cur.fetchall()]
     conn.close()
     return out
@@ -83,10 +88,21 @@ def brain_neighbors(name: str, k: int = 15) -> dict:
     """Graph: notes this one links to ([[links]]) and notes that link back to it."""
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
+    # A [[wikilink]] in another note may target this note by its filename slug rather
+    # than its frontmatter title (e.g. [[marcus-aurelius]] instead of [[Marcus Aurelius]]).
+    # When `name` is a file path we also try the slug so those incoming edges aren't
+    # missed. (web.py's /api/note backlinks query does the same, resolving the DB title
+    # and the filename slug independently.) Only derive a slug for a .md path — a plain
+    # title can contain a dot ("Viktor E. Frankl") that splitext would mangle into a
+    # bogus slug.
+    targets = [name]
+    if name.endswith(".md"):
+        targets.append(os.path.splitext(os.path.basename(name))[0])
     cur.execute("SELECT DISTINCT unnest(links) AS link FROM chunks WHERE title = %s OR file = %s",
                 (name, name))
     outgoing = [row["link"] for row in cur.fetchall()]
-    cur.execute("SELECT title, file, category FROM chunks WHERE %s = ANY(links) LIMIT %s", (name, k))
+    cur.execute("SELECT title, file, category FROM chunks WHERE links && %s LIMIT %s",
+                (targets, k))
     incoming = [dict(row) for row in cur.fetchall()]
     conn.close()
     return dict(links_to=outgoing, linked_from=incoming)
