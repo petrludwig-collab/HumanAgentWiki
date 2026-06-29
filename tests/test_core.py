@@ -35,8 +35,12 @@ def test_split_blocks_on_headings():
 
 
 def test_category_of():
+    # A note inside a top-level folder takes that folder as its category.
     assert index.category_of(os.path.join("Books", "x.md")) == "Books"
-    assert index.category_of("root.md") == "uncategorized"
+    # A note in the vault root has no folder, so it falls back to the notes
+    # directory's own name (NOTES_DIR basename), not a literal "uncategorized".
+    root_cat = os.path.basename(index.NOTES_DIR.rstrip(os.sep)) or "notes"
+    assert index.category_of("root.md") == root_cat
 
 
 def test_link_regex():
