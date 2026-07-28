@@ -5,6 +5,7 @@ Run:  pip install -r requirements-dev.txt  &&  pytest
 import os
 import pytest
 
+import common
 import index
 import web
 
@@ -49,10 +50,13 @@ def test_token_windows_respect_limit_and_overlap():
     assert all(len(window) <= 4 for window in windows)
 
 
-@pytest.mark.parametrize("max_tokens,overlap", [(0, 0), (4, -1), (4, 4)])
-def test_token_windows_reject_invalid_sizes(max_tokens, overlap):
+def test_token_windows_clamps_overlap_for_small_windows():
+    assert list(index.token_windows(list(range(3)), max_tokens=1, overlap=48)) == [[0], [1], [2]]
+
+
+def test_token_windows_reject_invalid_size():
     with pytest.raises(ValueError):
-        list(index.token_windows([1, 2], max_tokens=max_tokens, overlap=overlap))
+        list(index.token_windows([1, 2], max_tokens=0, overlap=0))
 
 
 class _WhitespaceTokenizer:
@@ -70,11 +74,13 @@ def test_split_long_chunks_keeps_every_embedding_within_model_limit():
     tokenizer = _WhitespaceTokenizer()
     chunk = {
         "title": "Long section",
-        "text": "original text",
-        "emb_text": " ".join(f"word{i}" for i in range(1100)),
+        "text": "# Original Markdown\n\noriginal text",
+        "emb_prefix": "File title - Long section\n",
+        "emb_body": " ".join(f"word{i}" for i in range(1100)),
+        "emb_text": "File title - Long section\n" + " ".join(f"word{i}" for i in range(1100)),
     }
 
-    parts = index.split_long_chunks([chunk], tokenizer)
+    parts = index.split_long_chunks([chunk], tokenizer, model_limit=512)
 
     assert len(parts) == 3
     assert [part["title"] for part in parts] == [
@@ -84,6 +90,26 @@ def test_split_long_chunks_keeps_every_embedding_within_model_limit():
         len(tokenizer(part["emb_text"], add_special_tokens=False)["input_ids"]) + 2 <= 512
         for part in parts
     )
+    assert all(part["text"] == "# Original Markdown\n\noriginal text" for part in parts)
+
+
+def test_embedding_token_limit_uses_the_smallest_model_constraint():
+    class _Config:
+        max_position_embeddings = 4096
+
+    class _Module:
+        class auto_model:
+            config = _Config()
+
+    class _Model:
+        max_seq_length = 8192
+        tokenizer = type("Tokenizer", (), {"model_max_length": 1024})()
+
+        def __getitem__(self, index):
+            assert index == 0
+            return _Module()
+
+    assert common.embedding_token_limit(_Model()) == 1024
 
 
 # ---------- web.py ----------

@@ -18,7 +18,7 @@ import glob
 import json
 import time
 import hashlib
-from common import connect, embed, get_model, NOTES_DIR
+from common import connect, embed, embedding_token_limit, get_model, NOTES_DIR
 
 HEADER_RE = re.compile(r'^(#{2,3})\s+(.*)$')
 LINK_RE   = re.compile(r'\[\[([^\]]+?)\]\]')
@@ -44,7 +44,6 @@ if _inc is None:
     _inc = ",".join(_FCFG.get("include_dirs", []))
 INCLUDE_DIRS = [d.strip() for d in _inc.split(",") if d.strip()]
 MIN_CHUNK_CHARS = 25  # skip trivially short blocks (stray lines, empty sections)
-EMBED_MAX_TOKENS = 512
 EMBED_OVERLAP_TOKENS = 48
 
 
@@ -119,24 +118,26 @@ def process_file(path):
             continue
         title = header.strip() if header else f_title
         links = LINK_RE.findall(full)
-        emb_text = f"{f_title} - {title}\n{content}".strip() if title != f_title else full
+        emb_prefix = f"{f_title} - {title}\n" if title != f_title else ""
+        emb_body = content if emb_prefix else full
+        emb_text = f"{emb_prefix}{emb_body}".strip()
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
                         links=links, tags=tags, text=full, meta=json.dumps(fm, ensure_ascii=False),
-                        emb_text=emb_text))
+                        emb_prefix=emb_prefix, emb_body=emb_body, emb_text=emb_text))
     if not out:  # short note (title + a couple of links): still emit one node so it
         text = (f_title + "\n" + body).strip() or f_title   # appears and links to it resolve
         out.append(dict(file=rel, category=category, node_type=node_type, title=f_title[:200],
                         links=LINK_RE.findall(body), tags=tags, text=text,
-                        meta=json.dumps(fm, ensure_ascii=False), emb_text=text))
+                        meta=json.dumps(fm, ensure_ascii=False),
+                        emb_prefix="", emb_body=text, emb_text=text))
     return out
 
 
-def token_windows(token_ids, max_tokens=EMBED_MAX_TOKENS, overlap=EMBED_OVERLAP_TOKENS):
+def token_windows(token_ids, max_tokens, overlap=EMBED_OVERLAP_TOKENS):
     """Yield overlapping windows that never exceed the embedding token limit."""
     if max_tokens < 1:
         raise ValueError("max_tokens must be positive")
-    if overlap < 0 or overlap >= max_tokens:
-        raise ValueError("overlap must be non-negative and smaller than max_tokens")
+    overlap = max(0, min(overlap, max_tokens - 1))
     for start in range(0, len(token_ids), max_tokens - overlap):
         window = token_ids[start:start + max_tokens]
         if not window:
@@ -146,35 +147,41 @@ def token_windows(token_ids, max_tokens=EMBED_MAX_TOKENS, overlap=EMBED_OVERLAP_
             break
 
 
-def split_long_chunks(chunks, tokenizer):
+def split_long_chunks(chunks, tokenizer, model_limit):
     """Split only overlong embedding inputs, preserving section context per part."""
     special_tokens = tokenizer.num_special_tokens_to_add(pair=False)
-    payload_limit = EMBED_MAX_TOKENS - special_tokens
+    payload_limit = model_limit - special_tokens
     if payload_limit < 1:
         raise ValueError("embedding model leaves no room for payload tokens")
 
     expanded = []
     for chunk in chunks:
-        token_ids = tokenizer(chunk['emb_text'], add_special_tokens=False)['input_ids']
-        if len(token_ids) <= payload_limit:
+        prefix = chunk.get('emb_prefix', '')
+        body = chunk.get('emb_body', chunk['emb_text'])
+        prefix_ids = tokenizer(prefix, add_special_tokens=False)['input_ids']
+        token_ids = tokenizer(body, add_special_tokens=False)['input_ids']
+        if len(prefix_ids) + len(token_ids) <= payload_limit:
             expanded.append(chunk)
             continue
 
-        context = f"{chunk['title']}\n"
-        context_ids = tokenizer(context, add_special_tokens=False)['input_ids']
-        body_limit = payload_limit - len(context_ids)
+        body_limit = payload_limit - len(prefix_ids)
         if body_limit < 1:
-            context = ""
-            context_ids = []
+            prefix = ""
             body_limit = payload_limit
 
         parts = list(token_windows(token_ids, body_limit, EMBED_OVERLAP_TOKENS))
         for number, window in enumerate(parts, start=1):
             text = tokenizer.decode(window, skip_special_tokens=True).strip()
+            # Decoding and encoding can change token counts slightly. Trim until
+            # the final model input is guaranteed to fit instead of truncating it.
+            while window and len(tokenizer(f"{prefix}{text}", add_special_tokens=False)['input_ids']) > payload_limit:
+                window = window[:-1]
+                text = tokenizer.decode(window, skip_special_tokens=True).strip()
             part = dict(chunk)
             part['title'] = f"{chunk['title']} ({number}/{len(parts)})"[:200]
-            part['text'] = text
-            part['emb_text'] = f"{context}{text}".strip()
+            # Keep the original Markdown for the UI and full-text index. The
+            # decoded fragment is used only as the model input for this part.
+            part['emb_text'] = f"{prefix}{text}".strip()
             expanded.append(part)
     return expanded
 
@@ -213,7 +220,8 @@ def reindex_files(cur, abs_files):
     if rels:
         cur.execute("DELETE FROM chunks WHERE file = ANY(%s)", (rels,))
     if chunks:
-        chunks = split_long_chunks(chunks, get_model().tokenizer)
+        model = get_model()
+        chunks = split_long_chunks(chunks, model.tokenizer, embedding_token_limit(model))
         vecs = embed([c['emb_text'] for c in chunks], batch_size=8)
         for c, v in zip(chunks, vecs):
             cur.execute(INSERT_SQL, (c['file'], c['category'], c['node_type'], c['title'],

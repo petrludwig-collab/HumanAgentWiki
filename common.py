@@ -42,11 +42,21 @@ def get_model():
     dev = ("cuda" if torch.cuda.is_available()
            else "mps" if torch.backends.mps.is_available() else "cpu")
     model = SentenceTransformer(EMB_MODEL, device=dev)
-    # The default BGE-M3 checkpoint used by this project has a 512-token
-    # position-embedding limit. The indexer splits longer note sections before
-    # embedding, so this must not be raised beyond the model's real limit.
-    model.max_seq_length = 512
     return model
+
+
+def embedding_token_limit(model=None):
+    """Return the usable sequence limit for the currently configured model."""
+    model = model or get_model()
+    candidates = [model.max_seq_length, model.tokenizer.model_max_length]
+    config = getattr(getattr(model[0], "auto_model", None), "config", None)
+    if config is not None:
+        candidates.append(getattr(config, "max_position_embeddings", None))
+    limits = [int(value) for value in candidates
+              if value is not None and 0 < int(value) < 1_000_000]
+    if not limits:
+        raise ValueError("configured embedding model has no finite token limit")
+    return min(limits)
 
 
 def embed(texts, batch_size=16):
