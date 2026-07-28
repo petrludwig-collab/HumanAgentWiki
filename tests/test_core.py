@@ -112,6 +112,26 @@ def test_embedding_token_limit_uses_the_smallest_model_constraint():
     assert common.embedding_token_limit(_Model()) == 1024
 
 
+def test_configure_embedding_length_applies_operational_cap():
+    class _Config:
+        max_position_embeddings = 8192
+
+    class _Module:
+        class auto_model:
+            config = _Config()
+
+    class _Model:
+        max_seq_length = 8192
+        tokenizer = type("Tokenizer", (), {"model_max_length": 8192})()
+
+        def __getitem__(self, index):
+            return _Module()
+
+    model = _Model()
+    assert common.configure_embedding_length(model, requested_limit=1024) == 1024
+    assert common.embedding_token_limit(model) == 1024
+
+
 # ---------- web.py ----------
 def test_slugify():
     assert web.slugify("Hello, World!") == "hello-world"
