@@ -123,13 +123,15 @@ def process_file(path):
         emb_text = f"{emb_prefix}{emb_body}".strip()
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
                         links=links, tags=tags, text=full, meta=json.dumps(fm, ensure_ascii=False),
-                        emb_prefix=emb_prefix, emb_body=emb_body, emb_text=emb_text))
+                        emb_prefix=emb_prefix, emb_body=emb_body,
+                        text_prefix=(header + "\n") if header else "",
+                        emb_text=emb_text))
     if not out:  # short note (title + a couple of links): still emit one node so it
         text = (f_title + "\n" + body).strip() or f_title   # appears and links to it resolve
         out.append(dict(file=rel, category=category, node_type=node_type, title=f_title[:200],
                         links=LINK_RE.findall(body), tags=tags, text=text,
                         meta=json.dumps(fm, ensure_ascii=False),
-                        emb_prefix="", emb_body=text, emb_text=text))
+                        emb_prefix="", emb_body=text, text_prefix="", emb_text=text))
     return out
 
 
@@ -148,7 +150,7 @@ def token_windows(token_ids, max_tokens, overlap=EMBED_OVERLAP_TOKENS):
 
 
 def split_long_chunks(chunks, tokenizer, model_limit):
-    """Split only overlong embedding inputs, preserving section context per part."""
+    """Split overlong embeddings while retaining source-accurate text fragments."""
     special_tokens = tokenizer.num_special_tokens_to_add(pair=False)
     payload_limit = model_limit - special_tokens
     if payload_limit < 1:
@@ -159,7 +161,11 @@ def split_long_chunks(chunks, tokenizer, model_limit):
         prefix = chunk.get('emb_prefix', '')
         body = chunk.get('emb_body', chunk['emb_text'])
         prefix_ids = tokenizer(prefix, add_special_tokens=False)['input_ids']
-        token_ids = tokenizer(body, add_special_tokens=False)['input_ids']
+        encoded = tokenizer(body, add_special_tokens=False, return_offsets_mapping=True)
+        token_ids = encoded['input_ids']
+        offsets = encoded.get('offset_mapping')
+        if offsets is None:
+            raise ValueError("embedding tokenizer must provide offset mappings for long chunks")
         if len(prefix_ids) + len(token_ids) <= payload_limit:
             expanded.append(chunk)
             continue
@@ -170,7 +176,9 @@ def split_long_chunks(chunks, tokenizer, model_limit):
             body_limit = payload_limit
 
         parts = list(token_windows(token_ids, body_limit, EMBED_OVERLAP_TOKENS))
+        previous_end = 0
         for number, window in enumerate(parts, start=1):
+            window_start = (number - 1) * (body_limit - min(EMBED_OVERLAP_TOKENS, body_limit - 1))
             text = tokenizer.decode(window, skip_special_tokens=True).strip()
             # Decoding and encoding can change token counts slightly. Trim until
             # the final model input is guaranteed to fit instead of truncating it.
@@ -178,11 +186,17 @@ def split_long_chunks(chunks, tokenizer, model_limit):
                 window = window[:-1]
                 text = tokenizer.decode(window, skip_special_tokens=True).strip()
             part = dict(chunk)
-            part['title'] = f"{chunk['title']} ({number}/{len(parts)})"[:200]
-            # Keep the original Markdown for the UI and full-text index. The
-            # decoded fragment is used only as the model input for this part.
+            window_end = window_start + len(window)
+            source_start = offsets[previous_end][0] if previous_end < len(offsets) else len(body)
+            source_end = offsets[window_end - 1][1] if window_end else source_start
+            source_text = body[source_start:source_end]
+            # Store non-overlapping original Markdown for UI and full-text
+            # search. Embeddings retain their overlap independently.
+            part['text'] = f"{chunk.get('text_prefix', '') if number == 1 else ''}{source_text}".strip()
+            part['links'] = LINK_RE.findall(part['text'])
             part['emb_text'] = f"{prefix}{text}".strip()
             expanded.append(part)
+            previous_end = window_end
     return expanded
 
 

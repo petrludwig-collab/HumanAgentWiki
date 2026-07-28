@@ -63,8 +63,17 @@ class _WhitespaceTokenizer:
     def num_special_tokens_to_add(self, pair=False):
         return 2
 
-    def __call__(self, text, add_special_tokens=False):
-        return {"input_ids": text.split()}
+    def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False):
+        tokens = text.split()
+        result = {"input_ids": tokens}
+        if return_offsets_mapping:
+            offsets, cursor = [], 0
+            for token in tokens:
+                start = text.index(token, cursor)
+                offsets.append((start, start + len(token)))
+                cursor = start + len(token)
+            result["offset_mapping"] = offsets
+        return result
 
     def decode(self, token_ids, skip_special_tokens=True):
         return " ".join(token_ids)
@@ -74,23 +83,24 @@ def test_split_long_chunks_keeps_every_embedding_within_model_limit():
     tokenizer = _WhitespaceTokenizer()
     chunk = {
         "title": "Long section",
-        "text": "# Original Markdown\n\noriginal text",
+        "text": "## Long section\n\noriginal text",
         "emb_prefix": "File title - Long section\n",
         "emb_body": " ".join(f"word{i}" for i in range(1100)),
+        "text_prefix": "## Long section\n",
         "emb_text": "File title - Long section\n" + " ".join(f"word{i}" for i in range(1100)),
     }
 
     parts = index.split_long_chunks([chunk], tokenizer, model_limit=512)
 
     assert len(parts) == 3
-    assert [part["title"] for part in parts] == [
-        "Long section (1/3)", "Long section (2/3)", "Long section (3/3)",
-    ]
+    assert [part["title"] for part in parts] == ["Long section", "Long section", "Long section"]
     assert all(
         len(tokenizer(part["emb_text"], add_special_tokens=False)["input_ids"]) + 2 <= 512
         for part in parts
     )
-    assert all(part["text"] == "# Original Markdown\n\noriginal text" for part in parts)
+    assert parts[0]["text"].startswith("## Long section\n")
+    assert all("word0" not in part["text"] for part in parts[1:])
+    assert " ".join(part["text"] for part in parts).count("word1099") == 1
 
 
 def test_embedding_token_limit_uses_the_smallest_model_constraint():
