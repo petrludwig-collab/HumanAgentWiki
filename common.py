@@ -42,7 +42,10 @@ def get_model():
     dev = ("cuda" if torch.cuda.is_available()
            else "mps" if torch.backends.mps.is_available() else "cpu")
     model = SentenceTransformer(EMB_MODEL, device=dev)
-    model.max_seq_length = 1024  # notes are chunked small; keeps memory sane on MPS
+    # The default BGE-M3 checkpoint used by this project has a 512-token
+    # position-embedding limit. The indexer splits longer note sections before
+    # embedding, so this must not be raised beyond the model's real limit.
+    model.max_seq_length = 512
     return model
 
 
