@@ -36,7 +36,8 @@ def test_split_blocks_on_headings():
 
 def test_category_of():
     assert index.category_of(os.path.join("Books", "x.md")) == "Books"
-    assert index.category_of("root.md") == "uncategorized"
+    expected_root_category = os.path.basename(index.NOTES_DIR.rstrip(os.sep)) or "notes"
+    assert index.category_of("root.md") == expected_root_category
 
 
 def test_link_regex():
