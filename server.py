@@ -11,12 +11,15 @@ from common import connect, embed, MCP_HOST, MCP_PORT
 
 try:
     from mcp.server.fastmcp import FastMCP
-    mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
-    _is_fastmcp = True
-except ImportError:
+except ModuleNotFoundError as e:
+    if getattr(e, "name", None) != "mcp.server.fastmcp":
+        raise
     from mcp.server.mcpserver import MCPServer
     mcp = MCPServer("humanagentwiki")
     _is_fastmcp = False
+else:
+    mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
+    _is_fastmcp = True
 
 COLS = "id, file, category, node_type, title, links, text"
 
