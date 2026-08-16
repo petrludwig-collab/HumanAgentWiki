@@ -5,12 +5,18 @@ kept in memory. Any MCP-compatible agent (Claude, etc.) connects to it.
 
 Tools: brain_search, brain_get, brain_neighbors.
 """
-from mcp.server.fastmcp import FastMCP
 from psycopg.rows import dict_row
 
 from common import connect, embed, MCP_HOST, MCP_PORT
 
-mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
+try:
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
+    _is_fastmcp = True
+except ImportError:
+    from mcp.server.mcpserver import MCPServer
+    mcp = MCPServer("humanagentwiki")
+    _is_fastmcp = False
 
 COLS = "id, file, category, node_type, title, links, text"
 
@@ -95,7 +101,10 @@ def brain_neighbors(name: str, k: int = 15) -> dict:
 def serve():
     embed("warmup")  # load the model into memory before accepting requests
     print(f"HumanAgentWiki MCP server: {MCP_HOST}:{MCP_PORT} (streamable-http, /mcp)", flush=True)
-    mcp.run(transport="streamable-http")
+    if _is_fastmcp:
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run(transport="streamable-http", host=MCP_HOST, port=MCP_PORT)
 
 
 if __name__ == "__main__":
