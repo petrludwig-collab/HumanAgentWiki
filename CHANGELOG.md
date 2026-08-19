@@ -34,6 +34,8 @@ improvements. Verified end-to-end on a clean Ubuntu 22.04.
 - **False `(unresolved)` graph nodes.** `[[wikilink|alias]]` / `[[wikilink#heading]]` targets
   are now stripped to the note name before matching. (#14)
 - **`test_category_of` was environment-dependent**, failing the suite 11/12. (#14, closes #6)
+- **Runs on Python 3.9 again.** Replaced 3.10-only `X | None` annotations in `web.py` with
+  `Optional[...]` so the web UI imports on 3.9 interpreters.
 
 ## [1.0-mozek3] - 2026-06-18
 

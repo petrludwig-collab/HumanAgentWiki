@@ -13,6 +13,7 @@ import re
 import json
 import subprocess
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
@@ -171,7 +172,7 @@ def stats():
 
 class CategoryMeta(BaseModel):
     name: str
-    color: str | None = None
+    color: Optional[str] = None
 
 
 @app.post("/api/category-meta")
@@ -323,8 +324,8 @@ class NoteIn(BaseModel):
     category: str
     title: str
     text: str
-    file: str | None = None
-    tags: list[str] | None = None
+    file: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
 @app.post("/api/note")
@@ -559,7 +560,7 @@ def node_tags_list():
 
 class TagIn(BaseModel):
     tag: str
-    category: str | None = None
+    category: Optional[str] = None
 
 
 @app.post("/api/node-tags")
