@@ -3,11 +3,16 @@
 Runs as a local streamable-http service; the embedding model is loaded once and
 kept in memory. Any MCP-compatible agent (Claude, etc.) connects to it.
 
-Tools: brain_search, brain_get, brain_neighbors.
+Tools: brain_search, brain_get, brain_neighbors, brain_write.
 """
+import os
+import re
+import subprocess
+
 from psycopg.rows import dict_row
 
-from common import connect, embed, MCP_HOST, MCP_PORT
+from common import connect, embed, MCP_HOST, MCP_PORT, NOTES_DIR
+import index
 
 # FastMCP needs the `mcp` package < 2.0 (mcp 2.x removed `mcp.server.fastmcp`) on python >= 3.10.
 # When it is unavailable — mcp 2.x already installed, or no mcp on a python 3.9 interpreter — fall
@@ -122,6 +127,82 @@ def brain_neighbors(name: str, k: int = 15) -> dict:
     incoming = [dict(row) for row in cur.fetchall()]
     conn.close()
     return dict(links_to=outgoing, linked_from=incoming)
+
+
+def _slugify(t):
+    s = re.sub(r"[^\w\s-]", "", t.lower(), flags=re.UNICODE).strip()
+    return re.sub(r"[\s_]+", "-", s) or "note"
+
+
+def _safe_folder(name):
+    """A single safe folder name for a category — no separators, no traversal."""
+    return os.path.basename((name or "").strip().strip("/").replace("..", "")) or "uncategorized"
+
+
+def _safe_note_path(rel):
+    """Absolute .md path strictly inside NOTES_DIR, or raise ValueError (blocks traversal)."""
+    if os.path.isabs(rel) or not rel.endswith(".md"):
+        raise ValueError("path must be a relative .md file")
+    path = os.path.normpath(os.path.join(NOTES_DIR, rel))
+    if os.path.commonpath([NOTES_DIR, path]) != NOTES_DIR:
+        raise ValueError("path escapes the notes directory")
+    return path
+
+
+def _git(*args):
+    # Best-effort versioning — a missing git or an empty commit must never fail a write.
+    subprocess.run(["git", "-C", NOTES_DIR, *args], capture_output=True)
+
+
+@mcp.tool()
+def brain_write(title: str, text: str, category: str = "uncategorized",
+                tags: list = None, links: list = None, node_type: str = "note") -> dict:
+    """Create or update a note: writes a Markdown file, git-commits it, and re-indexes it so
+    search/read see it immediately. Before creating a new note it looks for an existing note with
+    the same title and updates that one instead of making a duplicate.
+
+    title: note title (also its kebab-cased filename). text: Markdown body.
+    category: top-level folder. tags / links: optional lists (links become [[wikilinks]]).
+    node_type: 'note' or 'hub'. Returns {ok, file, action: 'created'|'updated'}."""
+    title = (title or "").strip()
+    if not title:
+        return {"ok": False, "error": "title required"}
+    cat = _safe_folder(category)
+    rel = os.path.join(cat, _slugify(title) + ".md")
+    # de-dup: if a note with this exact title already exists, update it in place
+    conn = connect(); cur = conn.cursor()
+    cur.execute("SELECT file FROM chunks WHERE lower(title) = lower(%s) LIMIT 1", (title,))
+    row = cur.fetchone(); conn.close()
+    if row:
+        rel = row[0]
+    try:
+        path = _safe_note_path(rel)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    existed = os.path.exists(path)
+    front = [f"title: {title}", f"category: {cat}"]
+    if node_type and node_type != "note":
+        front.append(f"type: {node_type}")
+    if tags:
+        clean = [t.strip() for t in tags if t and t.strip()]
+        if clean:
+            front.append("tags: [" + ", ".join(clean) + "]")
+    body = (text or "").strip()
+    if links:
+        refs = " ".join(f"[[{l.strip()}]]" for l in links if l and l.strip())
+        if refs:
+            body = f"{body}\n\n{refs}".strip()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("---\n" + "\n".join(front) + f"\n---\n\n{body}\n")
+    _git("add", "-A"); _git("commit", "-m", f"{'edit' if existed else 'add'}: {title}")
+    conn = connect(); cur = conn.cursor()
+    index.reindex_files(cur, [path])
+    cur.execute("INSERT INTO files (file, hash, updated_at) VALUES (%s, %s, now()) "
+                "ON CONFLICT (file) DO UPDATE SET hash = EXCLUDED.hash, updated_at = now()",
+                (rel, index.file_hash(path)))
+    conn.close()
+    return {"ok": True, "file": rel, "action": "updated" if existed else "created"}
 
 
 def serve():

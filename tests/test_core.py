@@ -7,6 +7,7 @@ import pytest
 
 import common
 import index
+import server
 import web
 
 
@@ -157,3 +158,23 @@ def test_safe_md_path_rejects(bad):
 def test_safe_md_path_accepts_relative_md():
     p = web.safe_md_path("Books/note.md")
     assert p.endswith(os.path.join("Books", "note.md"))
+
+
+# ---------- server.py (brain_write helpers) ----------
+
+def test_server_slugify_and_safe_folder():
+    assert server._slugify("My First Note!") == "my-first-note"
+    assert server._slugify("   ") == "note"
+    assert server._safe_folder("../../etc") == "etc"      # traversal collapses to a plain name
+    assert server._safe_folder("") == "uncategorized"
+
+
+@pytest.mark.parametrize("bad", ["../evil.md", "/etc/x.md", "a/../../evil.md", "note.txt"])
+def test_server_safe_note_path_rejects(bad):
+    with pytest.raises(ValueError):
+        server._safe_note_path(bad)
+
+
+def test_server_safe_note_path_accepts_relative_md():
+    p = server._safe_note_path("Ideas/x.md")
+    assert p.endswith(os.path.join("Ideas", "x.md"))
