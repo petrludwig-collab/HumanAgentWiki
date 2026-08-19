@@ -217,7 +217,19 @@ PY
     warn "embedding dimension changed ($CUR_DIM -> ${EMBED_DIM}) - recreating schema"
     .venv/bin/python -c "import os,psycopg;c=psycopg.connect(os.environ['DATABASE_URL']);cur=c.cursor();cur.execute('DROP TABLE IF EXISTS chunks CASCADE');cur.execute('DROP TABLE IF EXISTS files CASCADE');c.commit()" 2>/dev/null || true
   fi
-  .venv/bin/python cli.py init-db && ok "schema ready"
+  if .venv/bin/python cli.py init-db; then
+    ok "schema ready"
+  else
+    die "Database schema failed — the pgvector 'vector' extension is not available.
+       This install cannot work without it, so stopping here instead of finishing 'green'.
+       Fix it one of these ways, then re-run ./install.sh:
+         - Ubuntu/Debian: install pgvector from the official PGDG apt repo
+           (https://wiki.postgresql.org/wiki/Apt), i.e. the postgresql-<ver>-pgvector package;
+         - or install Docker and re-run — this script then uses the bundled pgvector image."
+  fi
+else
+  die "No reachable PostgreSQL — cannot create the schema.
+       Install PostgreSQL + pgvector (or Docker) and re-run ./install.sh."
 fi
 
 # 7) notes folder (empty, or seeded with bundled examples) ------------------
