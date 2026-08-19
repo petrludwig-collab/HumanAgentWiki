@@ -23,6 +23,20 @@ from common import connect, embed, NOTES_DIR
 HEADER_RE = re.compile(r'^(#{2,3})\s+(.*)$')
 LINK_RE   = re.compile(r'\[\[([^\]]+?)\]\]')
 SKIP_DIRS = ('/.git/', '/.obsidian/', '/node_modules/')
+
+
+def link_targets(text):
+    """[[wikilink]] targets with the |alias and #heading stripped: [[a|b]] -> 'a', [[a#h]] -> 'a'.
+    Without this the graph stored 'a|b' as the whole target and never matched it, producing
+    false 'unresolved' nodes even when the target note exists. Also de-duplicates."""
+    seen, out = set(), []
+    for m in LINK_RE.findall(text):
+        t = m.split('|', 1)[0].split('#', 1)[0].strip()
+        if t and t not in seen:
+            seen.add(t); out.append(t)
+    return out
+
+
 # Settings that must stay consistent across EVERY `index` run — even when invoked by hand
 # without the usual env vars (the classic footgun: an incremental reindex with no
 # CATEGORY_LABELS silently re-labels notes, or a --full run with the wrong INCLUDE_DIRS
@@ -116,7 +130,7 @@ def process_file(path):
         if len(full) < MIN_CHUNK_CHARS:
             continue
         title = header.strip() if header else f_title
-        links = LINK_RE.findall(full)
+        links = link_targets(full)
         emb_text = f"{f_title} - {title}\n{content}".strip() if title != f_title else full
         out.append(dict(file=rel, category=category, node_type=node_type, title=title[:200],
                         links=links, tags=tags, text=full, meta=json.dumps(fm, ensure_ascii=False),
@@ -124,7 +138,7 @@ def process_file(path):
     if not out:  # short note (title + a couple of links): still emit one node so it
         text = (f_title + "\n" + body).strip() or f_title   # appears and links to it resolve
         out.append(dict(file=rel, category=category, node_type=node_type, title=f_title[:200],
-                        links=LINK_RE.findall(body), tags=tags, text=text,
+                        links=link_targets(body), tags=tags, text=text,
                         meta=json.dumps(fm, ensure_ascii=False), emb_text=text))
     return out
 
