@@ -101,6 +101,7 @@ def ensure_setup():
     conn.execute("CREATE TABLE IF NOT EXISTS category_meta "
                  "(name text PRIMARY KEY, color text, sort_order double precision, "
                  " updated_at timestamptz DEFAULT now())")
+    conn.execute("ALTER TABLE category_meta ADD COLUMN IF NOT EXISTS graph_excluded boolean DEFAULT false")
     conn.close()
 
 
@@ -137,15 +138,16 @@ def config():
     colors = dict(CATEGORY_COLORS)
     order = list(CATEGORY_COLORS.keys())
     conn = connect(); cur = conn.cursor()
-    cur.execute("SELECT name, color, sort_order FROM category_meta")
+    cur.execute("SELECT name, color, sort_order, graph_excluded FROM category_meta")
     rows = cur.fetchall(); conn.close()
     ordered = sorted([r for r in rows if r[2] is not None], key=lambda r: r[2])
-    for name, color, _ in rows:
+    for name, color, _, _gx in rows:
         if color:
             colors[name] = color
     if ordered:
         order = [r[0] for r in ordered]
-    return {"categoryColors": colors, "categoryOrder": order}
+    graph_excluded = [r[0] for r in rows if r[3]]
+    return {"categoryColors": colors, "categoryOrder": order, "graphExcluded": graph_excluded}
 
 
 @app.get("/api/stats")
@@ -178,6 +180,22 @@ def set_category_meta(m: CategoryMeta):
     conn.execute("INSERT INTO category_meta (name, color) VALUES (%s, %s) "
                  "ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color, updated_at = now()",
                  (m.name.strip(), m.color))
+    conn.close()
+    return {"ok": True}
+
+
+class CategoryGraph(BaseModel):
+    name: str
+    excluded: bool
+
+
+@app.post("/api/category-graph")
+def set_category_graph(g: CategoryGraph):
+    """Toggle whether a category is drawn in the 3D graph (search and MCP are unaffected)."""
+    conn = connect()
+    conn.execute("INSERT INTO category_meta (name, graph_excluded) VALUES (%s, %s) "
+                 "ON CONFLICT (name) DO UPDATE SET graph_excluded = EXCLUDED.graph_excluded, updated_at = now()",
+                 (g.name.strip(), bool(g.excluded)))
     conn.close()
     return {"ok": True}
 
@@ -419,6 +437,15 @@ def graph():
     links_by_file = {r["file"]: r["links"] for r in cur.fetchall()}
     cur.execute("SELECT tag, category FROM node_tags")
     node_tag_cats = {r["tag"]: r["category"] for r in cur.fetchall()}
+    # Categories flagged graph_excluded are NOT drawn in the 3D graph (they stay in search and
+    # MCP) — keeps the graph fast for very large folders. The graph is built in full first and
+    # these are pruned at the very end, so links between excluded notes still resolve and don't
+    # leave false "unresolved" nodes behind.
+    try:
+        cur.execute("SELECT name FROM category_meta WHERE graph_excluded")
+        _gx = {r["name"] for r in cur.fetchall()}
+    except Exception:
+        _gx = set()
     conn.close()
     title_to_file = {r["title"]: r["file"] for r in base}
 
@@ -432,20 +459,36 @@ def graph():
     nodes = {r["file"]: {"id": r["file"], "label": r["title"], "group": r["category"],
                          "tags": r["tags"] or [], "val": 16 if r["node_type"] == "hub" else 0.7}
              for r in base}
-    # categories are nodes too: one hub per category; every note links to it.
+    # categories are nodes too. If a note is titled EXACTLY like a category (a hub note for it),
+    # that note BECOMES the category node — one "Books"/"Projects"/… node instead of a separate
+    # cat: node. A note with any other title stays its own node and never hijacks the category.
     cats = sorted({r["category"] for r in base})
+
+    def cat_node(c):
+        return title_to_file.get(c) or ("cat:" + c)
+
     for c in cats:
-        nodes["cat:" + c] = {"id": "cat:" + c, "label": c, "group": c, "val": 54, "is_cat": True}
-    # A wikilink to a category (its label, its raw folder name, or a slug of either) should
-    # point at that category node — not spawn a duplicate empty node. e.g. [[longevity]] -> cat:Longevity.
+        cn = cat_node(c)
+        if cn.startswith("cat:"):
+            nodes[cn] = {"id": cn, "label": c, "group": c, "val": 54, "is_cat": True}
+        elif cn in nodes:
+            nodes[cn]["val"] = 54            # a hub note titled like the category serves as its node
+            nodes[cn]["is_cat"] = True
+    # A wikilink to a category (its label, its raw folder name, or a slug of either) should point
+    # at that category node (the hub note or the synthetic cat:) — not spawn a duplicate empty node.
     cat_key = {}
     for c in cats:
-        cat_key[c] = "cat:" + c; cat_key[slug(c)] = "cat:" + c
+        cat_key[c] = cat_node(c); cat_key[slug(c)] = cat_node(c)
     for raw, label in getattr(index, "CATEGORY_LABELS", {}).items():
-        if "cat:" + label in nodes:
+        cn = cat_node(label)
+        if cn in nodes:
             for k in (raw, label, slug(raw), slug(label)):
-                cat_key[k] = "cat:" + label
-    links = [{"source": r["file"], "target": "cat:" + r["category"]} for r in base]
+                cat_key[k] = cn
+    links = []
+    for r in base:
+        cn = cat_node(r["category"])
+        if r["file"] != cn:                  # don't link a hub note to itself
+            links.append({"source": r["file"], "target": cn})
     for src, targets in links_by_file.items():
         for t in targets:
             dst = title_to_file.get(t) or slug_to_file.get(slug(t)) or cat_key.get(t) or cat_key.get(slug(t))
@@ -467,6 +510,13 @@ def graph():
             if tagname in (r["tags"] or []):
                 links.append({"source": r["file"], "target": target})
     # sizes: category node = 54 (largest), HUB_TAG/hub note = 16 (medium), everything else = 2.
+    # Now that the full graph is built and every link is resolved, drop the nodes and links of
+    # any graph_excluded category. Search and MCP are unaffected.
+    if _gx:
+        _excl = {nid for nid, n in nodes.items() if n.get("group") in _gx}
+        if _excl:
+            nodes = {k: v for k, v in nodes.items() if k not in _excl}
+            links = [l for l in links if l["source"] not in _excl and l["target"] not in _excl]
     return {"nodes": list(nodes.values()), "links": links}
 
 

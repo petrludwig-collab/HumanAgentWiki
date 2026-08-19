@@ -187,7 +187,7 @@
   <script src="/static/marked.min.js"></script>
   <script>
     const PALETTE = ["#60a5fa","#34d399","#c084fc","#f59e0b","#f472b6","#eab308","#22d3ee","#fb923c","#a78bfa","#4ade80","#f87171","#38bdf8","#facc15","#2dd4bf"];
-    const groupColor = {}; let categories = [], categoryColors = {}, categoryOrder = [];
+    const groupColor = {}; let categories = [], categoryColors = {}, categoryOrder = [], graphExcludedSet = new Set();
     function assignColors(groups){
       // pinned colours first (CATEGORY_COLORS), then palette for the rest, skipping used hues —
       // so a category's colour is stable no matter what else exists.
@@ -266,7 +266,8 @@
           ? `<input type="color" class="cocol" value="${groupColor[g]||"#94a3b8"}" data-color="${g}" title="Change colour">`
           : `<span class="dot" style="background:${groupColor[g]||"#94a3b8"}"></span>`;
         const del = (ed && real) ? `<span class="x" data-del="${g}" title="Remove category">−</span>` : "";
-        return `<div class="leg${on?"":" off"}" data-g="${g}" ${ed&&real?'draggable="true"':''}>${handle}<span class="box">${on?"☑":"☐"}</span>${swatch}<span class="lname">${g}</span>${del}</div>`;
+        const gtog = (ed && real) ? `<span class="gtog" data-gtog="${g}" style="cursor:pointer;margin:0 4px" title="${graphExcludedSet.has(g)?'Hidden from the graph – click to show it in the graph':'In the graph – click to hide from the graph (stays in search)'}">${graphExcludedSet.has(g)?"🚫":"🌐"}</span>` : "";
+        return `<div class="leg${on?"":" off"}" data-g="${g}" ${ed&&real?'draggable="true"':''}>${handle}<span class="box">${on?"☑":"☐"}</span>${swatch}<span class="lname">${g}</span>${gtog}${del}</div>`;
       }).join("")
       + `<div class="ctl"><span class="ctl-link" id="leg-all">all</span> · <span class="ctl-link" id="leg-none">none</span> · <span class="ctl-link" id="leg-edit">${ed?"done":"edit"}</span></div>`
       + (ed ? `<div class="addcat"><input id="newcat" placeholder="New category..." onkeydown="if(event.key==='Enter')addCat()"><button class="btn" onclick="addCat()">+</button></div>` : "");
@@ -275,6 +276,7 @@
       el.querySelectorAll(".leg").forEach(d => {
         d.onclick = e => {
           if(e.target.dataset.del){ confirmDelCat(e.target.dataset.del); return; }
+          if(e.target.dataset.gtog){ e.stopPropagation(); toggleGraphCat(e.target.dataset.gtog); return; }
           if(ed) return;                              // edit mode: row click doesn't toggle / colour input handles itself
           const g = d.dataset.g; active.has(g)?active.delete(g):active.add(g); buildLegend(groups); applyFilter(); saveState({active:[...active], knownGroups: groups});
         };
@@ -290,6 +292,15 @@
       refreshStyles();
       buildLegend(legendGroups());
       await fetch("/api/category-meta", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:g, color})}).catch(()=>{});
+    }
+    // Toggle whether a category is drawn in the 3D graph. No effect on search or MCP — it only
+    // controls the visualisation, which keeps the graph fast when a folder is very large.
+    async function toggleGraphCat(g){
+      const excl = !graphExcludedSet.has(g);
+      if(excl) graphExcludedSet.add(g); else graphExcludedSet.delete(g);
+      buildLegend(legendGroups());
+      await fetch("/api/category-graph", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:g, excluded:excl})}).catch(()=>{});
+      await reloadGraph();
     }
     // drag-to-reorder categories in the legend
     let dragSrc = null;
@@ -609,6 +620,7 @@
     }
     function legendGroups(){
       const gs = new Set(categories); if(fullData) fullData.nodes.forEach(n=>gs.add(n.group));
+      graphExcludedSet.forEach(g=>gs.add(g));   // keep graph-hidden categories in the legend (with 🚫) so they can be brought back
       // order: (unresolved) first, then CATEGORY_COLORS key order (fixed), then the rest alphabetically
       const order = [];
       if(gs.has("(unresolved)")) order.push("(unresolved)");
@@ -705,7 +717,7 @@
     (async () => {
       progSet(8, "Loading categories…");
       { const cfg = await fetch("/api/config").then(r=>r.json()).catch(()=>({}));
-        categoryColors = cfg.categoryColors || {}; categoryOrder = cfg.categoryOrder || []; }
+        categoryColors = cfg.categoryColors || {}; categoryOrder = cfg.categoryOrder || []; graphExcludedSet = new Set(cfg.graphExcluded || []); }
       await loadCats();
       progSet(24, "Loading tags…");
       allTags = await fetch("/api/tags").then(r=>r.json()).catch(()=>[]);
