@@ -10,6 +10,9 @@ set -euo pipefail
 REPO="${HAW_REPO:-https://github.com/petrludwig-collab/HumanAgentWiki.git}"
 DIR="${HAW_DIR:-$HOME/humanagentwiki}"
 DB="${HAW_DB:-humanagentwiki}"
+# Some shells (cron, minimal CI, non-login) don't export USER; without this, `set -u` aborts
+# with a cryptic "USER: unbound variable" right on the DB-role path before any helpful message.
+USER="${USER:-$(id -un)}"
 
 if [ -t 1 ]; then B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; X=$'\033[0m'
 else B=; G=; Y=; R=; C=; X=; fi
