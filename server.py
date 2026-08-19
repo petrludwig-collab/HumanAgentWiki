@@ -32,7 +32,7 @@ except ImportError:
 
     mcp = _NoMCP()
 
-COLS = "id, file, category, node_type, title, links, text"
+COLS = "id, file, category, node_type, title, links, text, updated_at"
 
 
 def _filters(category, node_type):
@@ -44,10 +44,16 @@ def _filters(category, node_type):
     return (" AND " + " AND ".join(clauses)) if clauses else "", params
 
 
+def _iso_date(value):
+    """A note's last-changed date as YYYY-MM-DD, so an agent can judge staleness."""
+    return value.date().isoformat() if value is not None else None
+
+
 def _hit(row):
     text = row["text"]
     return dict(id=row["id"], file=row["file"], category=row["category"],
                 node_type=row["node_type"], title=row["title"], links=row["links"],
+                updated=_iso_date(row.get("updated_at")),
                 snippet=text[:400] + ("..." if len(text) > 400 else ""))
 
 
@@ -82,18 +88,24 @@ def search(query, k=8, category="", node_type=""):
 def brain_search(query: str, k: int = 8, category: str = "", node_type: str = "") -> list:
     """Hybrid semantic + keyword search over the notes.
     query: search text (any language). k: number of results.
-    category / node_type: optional filters. Returns ranked notes with a snippet."""
+    category / node_type: optional filters. Returns ranked notes with a snippet and
+    `updated` (YYYY-MM-DD, the note's last-changed date) so you can spot stale information."""
     return search(query, k, category, node_type)
 
 
 @mcp.tool()
 def brain_get(title_or_file: str) -> list:
-    """Return the full text of notes by exact title or file path."""
+    """Return the full text of notes by exact title or file path.
+    Each note includes `updated` (YYYY-MM-DD, its last-changed date) so you can judge staleness."""
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
-    cur.execute("SELECT file, category, node_type, title, links, text FROM chunks "
+    cur.execute("SELECT file, category, node_type, title, links, text, updated_at FROM chunks "
                 "WHERE title = %s OR file = %s LIMIT 25", (title_or_file, title_or_file))
-    out = [dict(row) for row in cur.fetchall()]
+    out = []
+    for row in cur.fetchall():
+        d = dict(row)
+        d["updated"] = _iso_date(d.pop("updated_at", None))
+        out.append(d)
     conn.close()
     return out
 
