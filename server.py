@@ -5,12 +5,32 @@ kept in memory. Any MCP-compatible agent (Claude, etc.) connects to it.
 
 Tools: brain_search, brain_get, brain_neighbors.
 """
-from mcp.server.fastmcp import FastMCP
 from psycopg.rows import dict_row
 
 from common import connect, embed, MCP_HOST, MCP_PORT
 
-mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
+# FastMCP needs the `mcp` package < 2.0 (mcp 2.x removed `mcp.server.fastmcp`) on python >= 3.10.
+# When it is unavailable — mcp 2.x already installed, or no mcp on a python 3.9 interpreter — fall
+# back to a no-op so the web / search side keeps working and only serve() reports a clear error.
+# requirements.txt pins mcp<2 so a normal install never hits this; the guard just protects a
+# pre-existing environment from a hard crash on import.
+try:
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("humanagentwiki", host=MCP_HOST, port=MCP_PORT)
+    _HAS_MCP = True
+except ImportError:
+    _HAS_MCP = False
+
+    class _NoMCP:
+        """Stand-in when FastMCP is unavailable: tool() is a transparent decorator, run() explains."""
+        def tool(self, *a, **k):
+            return lambda fn: fn
+
+        def run(self, *a, **k):
+            raise SystemExit("The MCP server needs the 'mcp' package >=1.2,<2 on python >=3.10.\n"
+                             "Install it with:  pip install 'mcp>=1.2,<2'")
+
+    mcp = _NoMCP()
 
 COLS = "id, file, category, node_type, title, links, text"
 
