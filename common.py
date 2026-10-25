@@ -74,7 +74,7 @@ def embedding_token_limit(model=None):
     return _model_token_limit(model or get_model())
 
 
-def embed(texts, batch_size=16):
+def embed(texts, batch_size=4):
     """Return a list of normalized embedding vectors."""
     if isinstance(texts, str):
         texts = [texts]
