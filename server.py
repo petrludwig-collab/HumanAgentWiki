@@ -70,8 +70,12 @@ def search(query, k=8, category="", node_type=""):
     pool = max(k * 4, 30)
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
+    # Reference lists ("## Zdroje") stay keyword-searchable but do not compete in the
+    # vector ranking, where long citation lists used to outrank the actual content.
     cur.execute(f"SELECT {COLS} FROM chunks WHERE TRUE {fcl} "
-                f"ORDER BY embedding <=> %s::vector LIMIT %s", fparams + [qvec, pool])
+                f"AND NOT (lower(title) = ANY(%s)) "
+                f"ORDER BY embedding <=> %s::vector LIMIT %s",
+                fparams + [sorted(index.REFERENCE_SECTIONS), qvec, pool])
     by_vector = cur.fetchall()
     cur.execute(f"SELECT {COLS} FROM chunks "
                 f"WHERE tsv @@ websearch_to_tsquery('simple', unaccent(%s)) {fcl} "
