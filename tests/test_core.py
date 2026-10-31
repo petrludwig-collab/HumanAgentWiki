@@ -64,7 +64,7 @@ class _WhitespaceTokenizer:
     def num_special_tokens_to_add(self, pair=False):
         return 2
 
-    def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False):
+    def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False, **kwargs):
         tokens = text.split()
         result = {"input_ids": tokens}
         if return_offsets_mapping:
@@ -102,6 +102,61 @@ def test_split_long_chunks_keeps_every_embedding_within_model_limit():
     assert parts[0]["text"].startswith("## Long section\n")
     assert all("word0" not in part["text"] for part in parts[1:])
     assert " ".join(part["text"] for part in parts).count("word1099") == 1
+
+
+def test_build_chunks_splits_on_line_boundaries_with_prefix_and_overlap():
+    tokenizer = _WhitespaceTokenizer()
+    lines = [" ".join(f"l{n}w{i}" for i in range(30)) for n in range(40)]  # 40 lines x 30 tokens
+    body = "\n".join(lines)
+    chunk = {"title": "Sec", "text": "## Sec\n" + body, "emb_prefix": "Note - Parent > Sec\n",
+             "emb_body": body, "text_prefix": "## Sec\n", "emb_text": "Note - Parent > Sec\n" + body}
+
+    parts = index.build_chunks([chunk], tokenizer, model_limit=512, chunk_tokens=200, overlap=20)
+
+    assert len(parts) > 1
+    for part in parts:
+        assert len(part["emb_text"].split()) <= 200
+        assert part["emb_text"].startswith("Note - Parent > Sec")   # context kept in every part
+        assert part["text"].split("\n")[-1].endswith("w29")          # cut only at line ends
+    assert parts[0]["text"].startswith("## Sec\n")
+    assert "l0w29" in parts[1]["emb_text"].split("\n", 2)[1] or "w29" in parts[1]["emb_text"]
+    stored = "\n".join(p["text"] for p in parts)
+    assert all(stored.count(f"l{n}w0 ") == 1 for n in range(40))   # stored text never overlaps
+
+
+def test_reference_section_is_kept_whole_but_embedded_without_urls():
+    tokenizer = _WhitespaceTokenizer()
+    body = "\n".join(f"[{i}] Source title {i} — https://example.com/{'x' * 50}/{i}" for i in range(300))
+    chunk = {"title": "Zdroje", "text": "## Zdroje\n" + body, "emb_prefix": "Note - Zdroje\n",
+             "emb_body": body, "text_prefix": "## Zdroje\n", "emb_text": "Note - Zdroje\n" + body,
+             "reference": True}
+
+    parts = index.build_chunks([chunk], tokenizer, model_limit=512)
+
+    assert len(parts) == 1 and parts[0]["text"] == chunk["text"]
+    assert "https://" not in parts[0]["emb_text"]
+    assert len(parts[0]["emb_text"].split()) + 2 <= 512
+
+
+def test_process_file_heading_path_and_reference_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(index, "NOTES_DIR", str(tmp_path))
+    note = tmp_path / "n.md"
+    note.write_text("---\ntitle: Note\n---\n# Note\nLead paragraph text long enough.\n"
+                    "## Parent\nParent body text long enough.\n### Child\nChild body text long enough.\n"
+                    "## Zdroje\n[1] A source — https://example.com/a\n", encoding="utf-8")
+    chunks = {c["title"]: c for c in index.process_file(str(note))}
+    assert chunks["Note"]["emb_text"].startswith("Note\nLead paragraph")
+    assert chunks["Note"]["text"].startswith("# Note")
+    assert chunks["Child"]["emb_prefix"] == "Note - Parent > Child\n"
+    assert chunks["Zdroje"]["reference"] and not chunks["Parent"]["reference"]
+
+
+def test_file_hash_depends_on_chunker_version(tmp_path, monkeypatch):
+    note = tmp_path / "n.md"
+    note.write_text("x", encoding="utf-8")
+    before = index.file_hash(str(note))
+    monkeypatch.setattr(index, "CHUNKER_VERSION", "next")
+    assert index.file_hash(str(note)) != before
 
 
 def test_embedding_token_limit_uses_the_smallest_model_constraint():
@@ -178,3 +233,81 @@ def test_server_safe_note_path_rejects(bad):
 def test_server_safe_note_path_accepts_relative_md():
     p = server._safe_note_path("Ideas/x.md")
     assert p.endswith(os.path.join("Ideas", "x.md"))
+
+
+# ---------- frontmatter: YAML lists / block values ----------
+FM_LISTS = """---
+title: "Overfitting backtestů"
+status: draft
+tags: [trading, "backtest", statistics]
+sources:
+  - https://ams.org/notices/201405/rnoti-p458.pdf
+  - "https://doi.org/10.2139/ssrn.2460551"
+aliases:
+- one
+- two
+---
+
+# Body
+"""
+
+
+def test_parse_frontmatter_block_list_of_urls():
+    fm, body = index.parse_frontmatter(FM_LISTS)
+    assert fm["sources"] == ["https://ams.org/notices/201405/rnoti-p458.pdf",
+                             "https://doi.org/10.2139/ssrn.2460551"]
+    assert fm["aliases"] == ["one", "two"]
+    # the old line parser turned '  - https://…' into a key '- https'
+    assert not any(k.startswith("-") or k == "https" for k in fm)
+    assert set(fm) == {"title", "status", "tags", "sources", "aliases"}
+    assert body.strip() == "# Body"
+
+
+def test_parse_frontmatter_flow_list_and_tags_helper():
+    fm, _ = index.parse_frontmatter(FM_LISTS)
+    assert fm["tags"] == ["trading", "backtest", "statistics"]
+    assert index.fm_tags(fm) == ["trading", "backtest", "statistics"]
+    fm2, _ = index.parse_frontmatter("---\ntags:\n  - a\n  - 'b c'\n---\nx")
+    assert index.fm_tags(fm2) == ["a", "b c"]
+    assert index.fm_tags({"tags": "x, [y]"}) == ["x", "y"]   # legacy string form
+    assert index.fm_tags({}) == [] and index.fm_tags({"tags": ""}) == []
+
+
+def test_parse_frontmatter_tolerates_unquoted_colon_and_comments():
+    fm, _ = index.parse_frontmatter("---\ntitle: Runbook: záloha HAW\n# comment\n"
+                                    "url: https://x.y/z\nowner: lana  # inline\n---\nx")
+    assert fm == {"title": "Runbook: záloha HAW", "url": "https://x.y/z", "owner": "lana"}
+
+
+def test_parse_frontmatter_block_scalars_and_nested_map():
+    fm, _ = index.parse_frontmatter("---\nsummary: >\n  first line\n  second\n"
+                                    "notes: |\n  a\n  b\nmeta:\n  k: v\n  n: 2\nempty:\n---\nx")
+    assert fm["summary"] == "first line second"
+    assert fm["notes"] == "a\nb"
+    assert fm["meta"] == {"k": "v", "n": "2"}
+    assert fm["empty"] == ""
+
+
+def test_parse_frontmatter_matches_yaml_baseloader():
+    yaml = pytest.importorskip("yaml")
+    block = FM_LISTS.split("---")[1]
+    assert index.parse_frontmatter(FM_LISTS)[0] == yaml.load(block, Loader=yaml.BaseLoader)
+
+
+def test_process_file_meta_keeps_lists(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(index, "NOTES_DIR", str(tmp_path))
+    (tmp_path / "trading").mkdir()
+    p = tmp_path / "trading" / "n.md"
+    p.write_text(FM_LISTS + "\n## Sekce\n" + "obsah " * 20, encoding="utf-8")
+    chunks = index.process_file(str(p))
+    meta = json.loads(chunks[0]["meta"])
+    assert meta["sources"][0].startswith("https://ams.org/")
+    assert chunks[0]["tags"] == ["trading", "backtest", "statistics"]
+    assert chunks[0]["category"] == "Trading"
+    assert chunks[0]["emb_prefix"].startswith("Overfitting backtestů")
+
+
+def test_fm_str_ignores_non_string_values():
+    assert index.fm_str({"title": ["a"]}, "title", "slug") == "slug"
+    assert index.fm_str({"title": "T"}, "title", "slug") == "T"
