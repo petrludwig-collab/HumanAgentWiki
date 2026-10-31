@@ -233,3 +233,81 @@ def test_server_safe_note_path_rejects(bad):
 def test_server_safe_note_path_accepts_relative_md():
     p = server._safe_note_path("Ideas/x.md")
     assert p.endswith(os.path.join("Ideas", "x.md"))
+
+
+# ---------- frontmatter: YAML lists / block values ----------
+FM_LISTS = """---
+title: "Overfitting backtestů"
+status: draft
+tags: [trading, "backtest", statistics]
+sources:
+  - https://ams.org/notices/201405/rnoti-p458.pdf
+  - "https://doi.org/10.2139/ssrn.2460551"
+aliases:
+- one
+- two
+---
+
+# Body
+"""
+
+
+def test_parse_frontmatter_block_list_of_urls():
+    fm, body = index.parse_frontmatter(FM_LISTS)
+    assert fm["sources"] == ["https://ams.org/notices/201405/rnoti-p458.pdf",
+                             "https://doi.org/10.2139/ssrn.2460551"]
+    assert fm["aliases"] == ["one", "two"]
+    # the old line parser turned '  - https://…' into a key '- https'
+    assert not any(k.startswith("-") or k == "https" for k in fm)
+    assert set(fm) == {"title", "status", "tags", "sources", "aliases"}
+    assert body.strip() == "# Body"
+
+
+def test_parse_frontmatter_flow_list_and_tags_helper():
+    fm, _ = index.parse_frontmatter(FM_LISTS)
+    assert fm["tags"] == ["trading", "backtest", "statistics"]
+    assert index.fm_tags(fm) == ["trading", "backtest", "statistics"]
+    fm2, _ = index.parse_frontmatter("---\ntags:\n  - a\n  - 'b c'\n---\nx")
+    assert index.fm_tags(fm2) == ["a", "b c"]
+    assert index.fm_tags({"tags": "x, [y]"}) == ["x", "y"]   # legacy string form
+    assert index.fm_tags({}) == [] and index.fm_tags({"tags": ""}) == []
+
+
+def test_parse_frontmatter_tolerates_unquoted_colon_and_comments():
+    fm, _ = index.parse_frontmatter("---\ntitle: Runbook: záloha HAW\n# comment\n"
+                                    "url: https://x.y/z\nowner: lana  # inline\n---\nx")
+    assert fm == {"title": "Runbook: záloha HAW", "url": "https://x.y/z", "owner": "lana"}
+
+
+def test_parse_frontmatter_block_scalars_and_nested_map():
+    fm, _ = index.parse_frontmatter("---\nsummary: >\n  first line\n  second\n"
+                                    "notes: |\n  a\n  b\nmeta:\n  k: v\n  n: 2\nempty:\n---\nx")
+    assert fm["summary"] == "first line second"
+    assert fm["notes"] == "a\nb"
+    assert fm["meta"] == {"k": "v", "n": "2"}
+    assert fm["empty"] == ""
+
+
+def test_parse_frontmatter_matches_yaml_baseloader():
+    yaml = pytest.importorskip("yaml")
+    block = FM_LISTS.split("---")[1]
+    assert index.parse_frontmatter(FM_LISTS)[0] == yaml.load(block, Loader=yaml.BaseLoader)
+
+
+def test_process_file_meta_keeps_lists(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(index, "NOTES_DIR", str(tmp_path))
+    (tmp_path / "trading").mkdir()
+    p = tmp_path / "trading" / "n.md"
+    p.write_text(FM_LISTS + "\n## Sekce\n" + "obsah " * 20, encoding="utf-8")
+    chunks = index.process_file(str(p))
+    meta = json.loads(chunks[0]["meta"])
+    assert meta["sources"][0].startswith("https://ams.org/")
+    assert chunks[0]["tags"] == ["trading", "backtest", "statistics"]
+    assert chunks[0]["category"] == "Trading"
+    assert chunks[0]["emb_prefix"].startswith("Overfitting backtestů")
+
+
+def test_fm_str_ignores_non_string_values():
+    assert index.fm_str({"title": ["a"]}, "title", "slug") == "slug"
+    assert index.fm_str({"title": "T"}, "title", "slug") == "T"

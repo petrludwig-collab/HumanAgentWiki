@@ -73,25 +73,108 @@ REFERENCE_SECTIONS = frozenset(s.strip().lower() for s in os.environ.get(
 URL_RE = re.compile(r'<?https?://\S+>?')
 # Bump whenever the chunking / embedding input changes: it is mixed into the stored file
 # hash, so the next ordinary (incremental) `index` run re-embeds every note.
-CHUNKER_VERSION = "2-token-aware"
+CHUNKER_VERSION = "3-fm-lists"
 
 
 def is_reference_section(heading):
     return bool(heading) and heading.strip().lower() in REFERENCE_SECTIONS
 
 
+_FM_KEY_RE  = re.compile(r'^([^\s#:-][^:]*?)\s*:\s*(.*)$')
+_FM_ITEM_RE = re.compile(r'^\s*-(?:\s+(.*))?$')
+
+
+def _fm_scalar(v):
+    """Plain/quoted YAML scalar -> str (quotes and a trailing ` # comment` removed)."""
+    v = (v or '').strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in '"\'':
+        return v[1:-1]
+    return re.sub(r'\s+#.*$', '', v).strip('"').strip("'")
+
+
+def _fm_flow_list(v):
+    """`[a, "b", c]` -> ['a', 'b', 'c']."""
+    return [_fm_scalar(x) for x in v.strip()[1:-1].split(',') if x.strip()]
+
+
+def _parse_fm_block(block):
+    """Tolerant YAML-subset parser for frontmatter. Scalars stay strings (as in YAML's
+    BaseLoader); supports `key: value`, flow lists `[a, b]`, block lists (`key:` +
+    `- item` lines), literal/folded scalars (`|` / `>`) and one level of nested
+    `key: value` mappings. Unlike a strict YAML loader it accepts sloppy hand-written
+    notes such as an unquoted `title: Runbook: backup` (split on the first colon)."""
+    fm, key, mode, buf = {}, None, None, []
+
+    def close():
+        if key is not None and mode in ('|', '>'):
+            fm[key] = ('\n' if mode == '|' else ' ').join(buf).strip()
+
+    for line in block.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            if mode == '|' and buf:
+                buf.append('')
+            continue
+        indented = line[:1] in (' ', '\t')
+        if key is not None and mode in ('|', '>') and indented:
+            buf.append(line.strip())
+            continue
+        item = _FM_ITEM_RE.match(line)
+        if key is not None and item and mode in (None, 'list'):
+            if mode is None:
+                mode, fm[key] = 'list', []
+            fm[key].append(_fm_scalar(item.group(1)))
+            continue
+        if key is not None and indented and mode in (None, 'map'):
+            sub = _FM_KEY_RE.match(line.strip())
+            if sub:
+                if mode is None:
+                    mode, fm[key] = 'map', {}
+                fm[key][sub.group(1).strip()] = _fm_scalar(sub.group(2))
+                continue
+        if key is not None and indented and isinstance(fm.get(key), str):
+            fm[key] = (fm[key] + ' ' + _fm_scalar(line)).strip()   # multi-line plain scalar
+            continue
+        m = _FM_KEY_RE.match(line)
+        if not m:
+            continue
+        close()
+        key, mode, buf = m.group(1).strip(), None, []
+        v = (m.group(2) or '').strip()
+        if v.startswith('[') and v.endswith(']'):
+            fm[key], mode = _fm_flow_list(v), 'flow'
+        elif re.fullmatch(r'[|>][-+]?', v):
+            mode = v[0]
+            fm[key] = ''
+        else:
+            fm[key] = _fm_scalar(v)
+            mode = None if not v else 'scalar'
+    close()
+    return fm
+
+
 def parse_frontmatter(text):
-    """Minimal YAML-ish frontmatter parser (key: value lines). Returns (dict, body)."""
-    fm = {}
+    """YAML frontmatter -> (dict, body). Values are str, list[str] or dict[str, str]."""
     if text.startswith('---'):
         end = text.find('\n---', 3)
         if end != -1:
-            for line in text[3:end].splitlines():
-                if ':' in line:
-                    k, v = line.split(':', 1)
-                    fm[k.strip()] = v.strip().strip('"').strip("'")
-            return fm, text[end + 4:]
-    return fm, text
+            return _parse_fm_block(text[3:end]), text[end + 4:]
+    return {}, text
+
+
+def fm_tags(fm):
+    """`tags` as a clean list whether written as `[a, b]`, a block list or `a, b`."""
+    raw = fm.get('tags') or []
+    if isinstance(raw, str):
+        raw = re.sub(r'[\[\]]', '', raw).split(',')
+    elif not isinstance(raw, list):
+        raw = []
+    return [t.strip().strip('"').strip("'") for t in raw if isinstance(t, str) and t.strip()]
+
+
+def fm_str(fm, key, default=''):
+    """A frontmatter field as a string (lists/maps are not valid titles/categories)."""
+    v = fm.get(key)
+    return v if isinstance(v, str) and v else default
 
 
 def split_sections(body):
@@ -145,13 +228,13 @@ def process_file(path):
     with open(path, encoding='utf-8') as f:
         raw = f.read()
     fm, body = parse_frontmatter(raw)
-    f_title  = fm.get('title', os.path.splitext(os.path.basename(rel))[0])
-    raw = fm.get('category') or fm.get('project') or category_of(rel)
+    f_title  = fm_str(fm, 'title', os.path.splitext(os.path.basename(rel))[0])
+    raw = fm_str(fm, 'category') or fm_str(fm, 'project') or category_of(rel)
     if str(raw).strip().lower() == 'uncategorized':   # placeholder -> fall back to project/folder
-        raw = fm.get('project') or category_of(rel)
+        raw = fm_str(fm, 'project') or category_of(rel)
     category = category_label(raw)
     node_type = 'hub' if fm.get('type') == 'hub' else 'note'
-    tags = [t.strip().strip('"').strip("'") for t in re.sub(r'[\[\]]', '', fm.get('tags', '')).split(',') if t.strip()]
+    tags = fm_tags(fm)
     out = []
     for path_h, header, content in split_sections(body):
         full = (header + '\n' + content).strip() if header else content.strip()

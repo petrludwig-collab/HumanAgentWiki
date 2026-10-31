@@ -301,14 +301,14 @@ def get_note(file: str):
     fm, body = index.parse_frontmatter(raw)
     if HIDE_BODY_RE:
         body = "\n".join(ln for ln in body.splitlines() if not HIDE_BODY_RE.search(ln))
-    title = fm.get("title", os.path.splitext(os.path.basename(file))[0])
-    tags = [t.strip().strip('"').strip("'") for t in re.sub(r"[\[\]]", "", fm.get("tags", "")).split(",") if t.strip()]
+    title = index.fm_str(fm, "title", os.path.splitext(os.path.basename(file))[0])
+    tags = index.fm_tags(fm)
     conn = connect()
     cur = conn.cursor(row_factory=dict_row)
     cur.execute("SELECT category FROM chunks WHERE file = %s LIMIT 1", (file,))
     crow = cur.fetchone()
     category = crow["category"] if crow else index.category_label(
-        fm.get("category") or fm.get("project") or index.category_of(file))
+        index.fm_str(fm, "category") or index.fm_str(fm, "project") or index.category_of(file))
     # Backlinks: brains link by slug (filename) as well as by title, so match the
     # incoming [[wikilinks]] against both forms of this note.
     slug = os.path.splitext(os.path.basename(file))[0]
@@ -345,8 +345,12 @@ def save_note(n: NoteIn):
         if old.startswith("---"):
             end = old.find("\n---", 3)
             if end != -1:
+                key = ""
                 for line in old[3:end].splitlines():
-                    key = line.split(":", 1)[0].strip() if ":" in line else ""
+                    # indented / `- item` lines continue the previous key (block lists,
+                    # nested maps) and must travel with it instead of being dropped
+                    if line.strip() and not (line[:1] in (" ", "\t") or line.lstrip().startswith("-")):
+                        key = line.split(":", 1)[0].strip() if ":" in line else ""
                     # drop title/category (re-set below); drop tags only if the client sent new ones
                     if key and key not in ("title", "category") and not (key == "tags" and n.tags is not None):
                         extra.append(line)
