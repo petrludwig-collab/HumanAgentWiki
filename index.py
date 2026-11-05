@@ -207,7 +207,11 @@ def split_long_chunks(chunks, tokenizer, model_limit):
             # Store non-overlapping original Markdown for UI and full-text
             # search. Embeddings retain their overlap independently.
             part['text'] = f"{chunk.get('text_prefix', '') if number == 1 else ''}{source_text}".strip()
-            part['links'] = link_targets(part['text'])
+            # A window boundary can cut a [[wikilink]] in half, so per-window extraction would
+            # silently drop it. The first part keeps every link of the whole chunk; later parts
+            # add only what they fully contain (a cut link has no opening/closing pair there).
+            part['links'] = (chunk['links'] if number == 1 and 'links' in chunk
+                             else link_targets(part['text']))
             part['emb_text'] = f"{prefix}{text}".strip()
             expanded.append(part)
             previous_end = window_end

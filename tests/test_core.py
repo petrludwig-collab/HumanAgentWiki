@@ -104,6 +104,26 @@ def test_split_long_chunks_keeps_every_embedding_within_model_limit():
     assert " ".join(part["text"] for part in parts).count("word1099") == 1
 
 
+def test_split_long_chunks_keeps_a_wikilink_cut_by_a_window_boundary():
+    tokenizer = _WhitespaceTokenizer()
+    words = [f"word{i}" for i in range(1100)]
+
+    def chunk_for(body):
+        return {"title": "Long section", "text": "## Long section\n\n" + body,
+                "emb_prefix": "File title - Long section\n", "emb_body": body,
+                "text_prefix": "## Long section\n", "emb_text": "File title - Long section\n" + body,
+                "links": index.link_targets(body)}
+
+    # Find where the first window ends, then put one link exactly across that boundary.
+    first = index.split_long_chunks([chunk_for(" ".join(words))], tokenizer, model_limit=512)[0]
+    last = int(first["text"].split()[-1].removeprefix("word"))
+    words[last], words[last + 1] = "[[Cut", "Link]]"
+    parts = index.split_long_chunks([chunk_for(" ".join(words))], tokenizer, model_limit=512)
+
+    assert all("[[Cut Link]]" not in part["text"] for part in parts)  # really cut in two
+    assert set().union(*(part["links"] for part in parts)) == {"Cut Link"}
+
+
 def test_embedding_token_limit_uses_the_smallest_model_constraint():
     class _Config:
         max_position_embeddings = 4096
